@@ -8,6 +8,25 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-02-21 — Frontend v0.9
+
+### SSE: switch from named events to {type, payload} envelope format
+
+**What changed:** The SSE Gateway now sends all events as unnamed data-only messages with a `{type, payload}` envelope instead of named SSE events. This eliminates a race condition where events were silently dropped before per-event-type `addEventListener` calls could be attached (especially on fast backend responses).
+
+Frontend template files changed:
+- `src/workers/sse-worker.ts` — Replaced per-event subscriptions with single `onmessage` handler; removed `subscribe` command from worker protocol; added version payload caching for late-joining tabs
+- `src/contexts/sse-context-provider.tsx` — Replaced per-event `addEventListener`/subscription logic with single `onmessage` envelope unwrapping; removed `attachedEventsRef`, `workerSubscribedEventsRef`, `ensureDirectEventSourceListener`, `ensureWorkerSubscription`
+- `tests/infrastructure/sse/sse-connectivity.spec.ts` — Updated task event tests to use envelope format; added 2 SharedWorker tests
+- `tests/infrastructure/deployment/deployment-banner.spec.ts` — Removed `correlation_id` matching (not in version payloads)
+- `tests/infrastructure/sse/task-events.spec.ts` — **New:** generic task event infrastructure tests (receive, payload structure, sequencing)
+
+**Migration steps:**
+1. Run `copier update` — all changed files are template-maintained and will be updated automatically.
+2. Run `pnpm update ssegateway` to pick up the new SSE Gateway `#stable` commit.
+3. If your app has custom code that uses `es.addEventListener('eventName', ...)` to listen for SSE events, switch to `es.onmessage` and unwrap the `{type, payload}` envelope.
+4. If your app sends `subscribe` commands to the SharedWorker, remove them — the worker no longer needs per-event subscriptions.
+
 ## 2026-02-20 (v0.7.2)
 
 ### Stderr logging in testing mode for Playwright visibility
