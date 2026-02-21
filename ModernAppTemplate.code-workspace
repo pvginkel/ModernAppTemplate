@@ -1,0 +1,47 @@
+{
+  "folders": [
+    {
+      "name": "MAT",
+      "path": ".",
+    },
+    {
+      "name": "EI-backend",
+      "path": "../ElectronicsInventory/backend",
+    },
+    {
+      "name": "EI-frontend",
+      "path": "../ElectronicsInventory/frontend",
+    },
+    {
+      "name": "IOT-backend",
+      "path": "../IoTSupport/backend",
+    },
+    {
+      "name": "IOT-frontend",
+      "path": "../IoTSupport/frontend",
+    },
+    {
+      "name": "DHCP-backend",
+      "path": "../DHCPApp/backend",
+    },
+    {
+      "name": "DHCP-frontend",
+      "path": "../DHCPApp/frontend",
+    },
+    {
+      "name": "ZC-backend",
+      "path": "../ZigbeeControl/backend",
+    },
+    {
+      "name": "ZC-frontend",
+      "path": "../ZigbeeControl/frontend",
+    },
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.git": true,
+      "**/.svn": true,
+      "**/.hg": true,
+    },
+  },
+}

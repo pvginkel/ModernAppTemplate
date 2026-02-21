@@ -1,0 +1,8 @@
+[submodule "backend"]
+	path = backend
+	url = https://github.com/pvginkel/ModernAppBackendTemplate.git
+	branch = main
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/pvginkel/ModernAppFrontendTemplate.git
+	branch = main
