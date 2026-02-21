@@ -5,3 +5,5 @@ node_modules
 /tmp
 /.pytest_cache
 /.ruff_cache
+/backend
+/frontend

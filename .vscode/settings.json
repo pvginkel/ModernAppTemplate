@@ -4,4 +4,16 @@
     "editor.formatOnSave": false
   },
   "python.REPL.enableREPLSmartSend": false,
+  "search.useIgnoreFiles": false,
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/__pycache__": true,
+    "**/.venv": true,
+    "**/dist": true,
+    "**/poetry.lock": true,
+    "**/package-lock.json": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.coverage": true
+  }
 }
