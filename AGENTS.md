@@ -103,6 +103,15 @@ S3_BUCKET_NAME=<project>-test
 
 Backend test suites with `use_s3=true` check S3 connectivity at startup (in `conftest_infrastructure.py`). If the `.env.test` file is missing or `S3_ENDPOINT_URL` is not set, tests abort immediately with a clear message. When creating a new downstream app, copy the Ceph credentials from `/work/ElectronicsInventory/backend/.env` into the app's `.env.test` and set an appropriate `S3_BUCKET_NAME`.
 
+## Dead Code Analysis
+
+Both templates include dead code detection as part of the `check` pipeline:
+
+- **Backend**: `poetry run check` runs ruff, mypy, vulture, and pytest. Vulture whitelist is in `vulture_whitelist.py` (app-owned, skip_if_exists).
+- **Frontend**: `pnpm run check` runs eslint, tsc, and knip. Template exclusions are in `knip-template-ignore.json` (template-owned, updated on each `copier update`).
+
+**Maintaining `knip-template-ignore.json`**: When adding or removing template-owned source files in the frontend template, update `template/knip-template-ignore.json` accordingly. This file lists all template-owned paths that knip should skip during unused-export analysis. Without it, template exports that aren't consumed by a particular app would be flagged as dead code.
+
 ## Commit Guidelines
 
 - **Parent repo**: Commit docs, scripts, and submodule pin updates here
