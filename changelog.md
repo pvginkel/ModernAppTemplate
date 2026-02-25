@@ -8,6 +8,38 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-02-25 — Backend v0.8 / v0.8.1, Frontend v0.12 / v0.12.1
+
+### Backend: Unified check script and vulture dead code detection
+
+**What changed:** Added `scripts/check.py` — a unified code quality runner that executes ruff, mypy, vulture, and pytest in sequence. Added vulture as a dev dependency with `vulture_whitelist.py` for false positives (callback signatures, TYPE_CHECKING patterns). Tightened ruff config: added ERA (commented-out code) and RUF100 (unused noqa) rules, per-file-ignores for alembic and tools directories.
+
+Backend template files changed:
+- `template/scripts/check.py` — **New:** unified check runner
+- `template/vulture_whitelist.py` — **New:** vulture false-positive whitelist (app-owned via `_skip_if_exists`)
+- `template/pyproject.toml.jinja` — Added vulture dep, `check` script entry point, ERA/RUF100 rules, per-file-ignores, mypy override for vulture_whitelist
+- `template/app/__init__.py.jinja` — Removed now-unnecessary `# noqa: F401` comments
+- `template/app/database.py` — Fixed import sort order
+- `template/app/config.py.jinja` — Used `_options` for unused param in non-database path (v0.8.1)
+- `template/alembic/env.py` — Removed unnecessary `# noqa: E402`
+- `template/tests/conftest.py` — Removed unnecessary F401 from noqa directive
+- `copier.yml` — Added `vulture_whitelist.py` to `_skip_if_exists`
+
+### Frontend: Knip dead code analysis
+
+**What changed:** Added knip for detecting unused files, exports, types, and dependencies. Template-owned files are excluded via `knip-template-ignore.json` (template-maintained). Template-provided dependencies that are only used in ignored files are listed in `ignoreDependencies`.
+
+Frontend template files changed:
+- `template/knip.config.ts` — **New:** knip configuration loading template-ignore list
+- `template/knip-template-ignore.json` — **New:** template-owned file exclusions (~60 paths)
+- `template/package.json.jinja` — Added `knip` devDependency, `check:knip` script, updated `check` to include knip
+
+**Migration steps:**
+1. Run `copier update` for both backend and frontend — template-maintained files update automatically.
+2. Backend: Run `poetry lock && poetry install` to install vulture. Run `ruff check --fix .` to auto-fix RUF100/ERA findings in app-owned files. Review and extend `vulture_whitelist.py` for any app-specific false positives.
+3. Frontend: Run `pnpm install` to install knip. Run `pnpm run check:knip` and fix any findings in app-owned code (remove unused exports, delete unused files, unexport types only used locally).
+4. Use `poetry run check` (backend) or `pnpm run check` (frontend) as the single command for all code quality checks.
+
 ## 2026-02-21 — Frontend v0.9
 
 ### SSE: switch from named events to {type, payload} envelope format
