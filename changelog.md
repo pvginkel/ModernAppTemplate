@@ -8,6 +8,53 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-02-27 — Backend v0.9.0, Frontend v0.13.0
+
+### Backend: Role hierarchy and 403 forbidden handling
+
+**What changed:** Added a full role hierarchy system to `AuthService` with `read_role`, `write_role`, `admin_role`, and `additional_roles` parameters. Method-based access control now automatically infers required role from HTTP method (GET/HEAD → read_role, mutating methods → write_role). The `@allow_roles` decorator overrides method inference. `/api/auth/self` now returns 403 when a user is authenticated but has no recognized hierarchical role. Startup validation (`validate_allow_roles_at_startup`) catches typos in `@allow_roles` decorators at boot time. OpenAPI spec is annotated with per-endpoint security info (`x-required-role`, `x-auth-roles`).
+
+Backend template files changed:
+- `template/app/services/auth_service.py` — Role hierarchy: `read_role`, `write_role`, `admin_role`, `additional_roles` params; `expand_roles()`, `resolve_required_role()`, `configured_roles`, `hierarchy_roles`
+- `template/app/utils/auth.py` — `@safe_query` decorator; updated `check_authorization()` with `auth_service` + `http_method` params; `validate_allow_roles_at_startup()`
+- `template/app/utils/spectree_config.py` — `BearerAuth` JWT security scheme; `annotate_openapi_security()` that injects `x-required-role` into OpenAPI operations
+- `template/app/__init__.py.jinja` — Added startup block (within `{% if use_oidc %}`): `validate_allow_roles_at_startup` + `annotate_openapi_security`
+- `template/app/api/auth.py` — 403 `AuthorizationException` for users with no recognized hierarchical role; role expansion in test sessions and local user
+- `template/app/api/oidc_hooks.py` — Role expansion in test sessions; pass `http_method` to `check_authorization` and `authenticate_request`
+
+**App configuration required:** After running `copier update`, edit `app/services/container.py` and add role parameters to your `AuthService` provider:
+
+```python
+auth_service = providers.Singleton(
+    AuthService,
+    config=config,
+    write_role="editor",          # required for POST/PUT/PATCH/DELETE
+    # additional_roles=["pipeline"],  # for non-hierarchical roles (e.g. CI/CD)
+)
+```
+
+**Migration steps:**
+1. Run `copier update` on the backend — template-maintained files update automatically.
+2. Edit `app/services/container.py`: add `write_role="editor"` (and `additional_roles` if needed) to the `AuthService` provider.
+3. If you use `@allow_roles` decorators, review them — startup validation will now raise `ValueError` at boot for any role not in `configured_roles`.
+
+### Frontend: 403 forbidden handling and role constants generation
+
+**What changed:** Added 403 detection throughout the auth stack. `isForbiddenError()` predicate added to `api-error.ts`. `isForbidden` flag added to `useAuth`, `AuthContext`, and `AuthGate`. `AuthGate` now shows a "No Access" screen with a logout button when the backend returns 403 from `/api/auth/self`. `generate-api.js` now generates `roles.ts` and `role-map.json` from `x-required-role` annotations in the OpenAPI spec (used with `Gate` components to enforce role checks in the UI).
+
+Frontend template files changed:
+- `template/src/lib/api/api-error.ts` — Added `isForbiddenError()` predicate for 403 detection
+- `template/src/hooks/use-auth.ts` — Added `isForbidden` flag; 403 excluded from `effectiveError`
+- `template/src/contexts/auth-context.tsx` — Added `isForbidden` to `AuthContextValue`; emits `'forbidden'` test event phase
+- `template/src/components/auth/auth-gate.tsx` — Added `AuthForbidden` component (lock icon, "No Access" message, logout button)
+- `template/src/lib/test/test-events.ts` — Added `'forbidden'` to `UiStateTestEvent.phase` union
+- `template/scripts/generate-api.js` — Added `generateRoles()` producing `roles.ts` (typed role constants) and `role-map.json` (hook→constant mapping) from OpenAPI `x-required-role` annotations
+
+**Migration steps:**
+1. Run `copier update` on the frontend — all changed files are template-maintained.
+2. No app-owned file changes required.
+3. After running `generate-api` with a backend that has the role system configured, `roles.ts` will contain typed constants for each non-reader role endpoint. Use these with `Gate` components to enforce access in the UI (app-specific work, no template changes needed).
+
 ## 2026-02-25 — Backend v0.8 / v0.8.1, Frontend v0.12 / v0.12.1
 
 ### Backend: Unified check script and vulture dead code detection
