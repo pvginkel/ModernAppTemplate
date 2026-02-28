@@ -119,3 +119,12 @@ Both templates include dead code detection as part of the `check` pipeline:
 - **Parent repo**: Commit docs and scripts here
 - **Template repos**: Commit template changes in `backend/` or `frontend/`, tag releases there independently
 - **Changelog**: Update `changelog.md` in the parent for cross-template changes; each template repo has its own changelog for template-specific changes
+
+## Template Change Workflow
+
+**Always follow `docs/downstream_sync_process.md` when making template changes.** This covers the full process: upstreaming the fix, regenerating test-app, running tests, writing the changelog entry, committing and tagging the template repo(s), and running `copier update` on all downstream apps.
+
+Key things to not skip:
+- Commit and tag **each template repo** that was changed (`backend/` and/or `frontend/`)
+- Commit the **parent repo** changelog
+- After `copier update`, commit **both the backend and frontend repos** of each downstream app — they are separate git repos
