@@ -8,6 +8,20 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-02-28 — Backend v0.9.1
+
+### Backend: Normalize BASEURL trailing slash
+
+**What changed:** `Settings.load()` now strips any trailing slash from `BASEURL` before storing it. This prevents double-slash URLs (e.g. `https://example.com//api/auth/callback`) when `BASEURL` is configured with a trailing slash.
+
+Backend template files changed:
+- `template/app/config.py.jinja` — `baseurl=env.BASEURL.rstrip("/")`
+
+**Migration steps:**
+1. Run `copier update` on the backend — the only change is in `app/config.py` (template-maintained).
+2. No app-owned file changes required.
+
+
 ## 2026-02-27 — Backend v0.9.0, Frontend v0.13.0
 
 ### Backend: Role hierarchy and 403 forbidden handling
