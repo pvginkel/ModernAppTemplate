@@ -4,7 +4,7 @@ Copier-based templates for generating self-contained Flask backend and React fro
 
 ## Repository Structure
 
-This is the parent repo. Backend and frontend templates are Git submodules with their own repos:
+This is the parent repo. Backend and frontend templates have their own repos, checked out inside this directory:
 
 ```
 ModernAppTemplate/                  # Parent repo (you are here)
@@ -18,17 +18,19 @@ ModernAppTemplate/                  # Parent repo (you are here)
 │   └── find_template_violations.py # Finds template drift in downstream apps
 ├── changelog.md                    # Coordinated changelog (both templates)
 ├── validate.sh                     # Regenerate + test both templates
-├── backend/                        # Submodule: ModernAppBackendTemplate
-└── frontend/                       # Submodule: ModernAppFrontendTemplate
+├── backend/                        # Checkout of ModernAppBackendTemplate (NOT a submodule)
+└── frontend/                       # Checkout of ModernAppFrontendTemplate (NOT a submodule)
 ```
 
-Each submodule has its own `CLAUDE.md` with template-specific instructions.
+`backend/` and `frontend/` are **not Git submodules** — they are separate repo checkouts listed in `.gitignore`. Copier does not understand submodules, so this arrangement keeps the template repos independent while colocating them for development.
+
+Each template repo has its own `CLAUDE.md` with template-specific instructions.
 
 ## Sandbox Environment
 
 - This repository is bind-mounted into `/work/ModernAppTemplate` inside a container.
-- Submodules are checked out at `backend/` and `frontend/`.
-- Git operations work in both the parent and submodules.
+- Template repos are checked out at `backend/` and `frontend/` (separate git repos, not submodules).
+- Git operations work in both the parent and the template repos.
 - The container includes poetry, node/npm, and standard toolchains.
 
 ## Downstream Apps
@@ -114,6 +116,6 @@ Both templates include dead code detection as part of the `check` pipeline:
 
 ## Commit Guidelines
 
-- **Parent repo**: Commit docs, scripts, and submodule pin updates here
-- **Submodules**: Commit template changes in the submodule, tag releases, then update the parent's submodule pin
-- **Changelog**: Update `changelog.md` in the parent for cross-template changes; each submodule has its own changelog for template-specific changes
+- **Parent repo**: Commit docs and scripts here
+- **Template repos**: Commit template changes in `backend/` or `frontend/`, tag releases there independently
+- **Changelog**: Update `changelog.md` in the parent for cross-template changes; each template repo has its own changelog for template-specific changes
