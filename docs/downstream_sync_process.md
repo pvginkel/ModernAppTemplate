@@ -53,7 +53,17 @@ For changes that belong in the template:
    ```
 4. Validate flag combinations with `ruff check` (at minimum: minimal, all-on).
 5. **Update `changelog.md`** with what changed and migration steps (see [Changelog Discipline](#changelog-discipline) below).
-6. Commit to the template repo.
+6. **Commit to the template repo(s) and tag.** Don't forget: `backend/` and `frontend/` are separate git repos. Commit and tag each one that was changed:
+   ```bash
+   cd /work/ModernAppTemplate/backend
+   git add -p && git commit -m "..."
+   git tag vX.Y.Z
+
+   cd /work/ModernAppTemplate/frontend
+   git add -p && git commit -m "..."
+   git tag vX.Y.Z
+   ```
+7. **Commit the parent repo changelog** (`/work/ModernAppTemplate/changelog.md`).
 
 ### Phase 3: Add new hooks if needed
 
@@ -81,7 +91,11 @@ With the template updated (Phases 2-3 complete):
    - Test utilities → `tests/conftest.py` or app-specific test helpers
 6. Run the app's full test suite.
 7. Re-run the violation finder to confirm a clean report.
-8. Commit.
+8. **Commit both the backend and frontend repos** for the downstream app. Each is a separate git repo — don't forget either one:
+   ```bash
+   cd /work/<App>/backend && git add -p && git commit -m "Update to backend template vX.Y.Z"
+   cd /work/<App>/frontend && git add -p && git commit -m "Update to frontend template vX.Y.Z"
+   ```
 
 ### Phase 5: Document in the downstream app's CLAUDE.md
 
