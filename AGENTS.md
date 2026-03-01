@@ -124,6 +124,8 @@ Both templates include dead code detection as part of the `check` pipeline:
 
 **Always follow `docs/downstream_sync_process.md` when making template changes.** This covers the full process: upstreaming the fix, regenerating test-app, running tests, writing the changelog entry, committing and tagging the template repo(s), and running `copier update` on all downstream apps.
 
+**Never apply a template change by directly editing files in downstream apps.** If you find yourself making the same edit to `nginx.conf`, `proxy.conf`, or any other template-owned file across multiple apps, stop — that is the wrong path. The correct path is always: change `template/` → regen → test → commit/tag the template repo → `copier update` each app. Direct edits to downstream template-owned files create drift that looks clean but isn't tracked by copier, and causes merge conflicts on the next real update.
+
 Key things to not skip:
 - Commit and tag **each template repo** that was changed (`backend/` and/or `frontend/`)
 - Commit the **parent repo** changelog
