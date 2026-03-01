@@ -130,3 +130,4 @@ Key things to not skip:
 - Commit and tag **each template repo** that was changed (`backend/` and/or `frontend/`)
 - Commit the **parent repo** changelog
 - After `copier update`, commit **both the backend and frontend repos** of each downstream app — they are separate git repos
+- When a template change also requires editing an app-owned file (e.g. removing a dependency from `pyproject.toml`): run `copier update` first on a clean repo, then make the app-owned edits. Copier requires a clean working tree, so editing before updating forces an awkward stash/pop dance.
