@@ -8,6 +8,19 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-01 — Frontend v0.13.3
+
+### Frontend: Increase nginx upload size limit to 50 MB
+
+**What changed:** Added `client_max_body_size 50M;` to the `http {}` block in `nginx.conf`. The previous default (1 MB) was causing 413 Entity Too Large errors on file uploads. Note: this limit is enforced by nginx independently of `proxy_buffering off` — both must be sufficient for large uploads.
+
+Frontend template files changed:
+- `template/nginx.conf.jinja` — added `client_max_body_size 50M;` in the `http {}` block
+
+**Migration steps:**
+1. Run `copier update` on the frontend — the only change is in `nginx.conf` (template-maintained).
+2. No app-owned file changes required.
+
 ## 2026-02-28 — Backend v0.9.1
 
 ### Backend: Normalize BASEURL trailing slash
