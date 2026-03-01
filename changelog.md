@@ -8,6 +8,35 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-01 — Backend v0.10.0
+
+### Backend: OIDC state in URL parameter + partitioned cookies (iframe support)
+
+**What changed:** Two related improvements that allow the OIDC login flow to work inside cross-origin iframes (e.g. Home Assistant):
+
+1. **State moved from cookie to encrypted URL parameter.** The PKCE auth state (code_verifier, redirect URL, nonce) is now encrypted with Fernet and carried as the OAuth `state` query parameter instead of a short-lived `auth_state` cookie. Third-party cookie blocking in cross-origin iframes would have silently dropped that cookie, breaking the callback.
+
+2. **Partitioned (CHIPS) cookie support.** A new `OIDC_COOKIE_PARTITIONED` env var (default `False`) sets the `Partitioned` attribute on all auth cookies. When set alongside `SameSite=None; Secure`, this allows cookies to work in cross-origin iframes without being treated as third-party cookies.
+
+3. **`get_cookie_kwargs()` replaces `get_cookie_secure()`.** A single helper now returns all common `set_cookie()` keyword arguments (httponly, secure, samesite, partitioned), keeping every call-site consistent.
+
+4. **`itsdangerous` dependency removed.** Auth state is now encrypted with `cryptography.fernet` (already a dependency). `itsdangerous` is no longer in the OIDC dependency block.
+
+Backend template files changed:
+- `template/app/config.py.jinja` — added `OIDC_COOKIE_PARTITIONED` env var and `oidc_cookie_partitioned` setting
+- `template/app/utils/auth.py` — `serialize_auth_state`/`deserialize_auth_state` use Fernet; `get_cookie_secure()` replaced by `get_cookie_kwargs()`
+- `template/app/services/oidc_client_service.py` — added `create_auth_state()` and `build_authorization_url()` methods; `generate_authorization_url()` is now a convenience wrapper
+- `template/app/api/auth.py` — login endpoint no longer sets `auth_state` cookie; callback reads encrypted state from `state` param; logout uses `get_cookie_kwargs()`
+- `template/app/api/oidc_hooks.py` — uses `get_cookie_kwargs()`
+- `template/app/api/testing_auth.py` — uses `get_cookie_kwargs()`
+- `template/pyproject.toml.jinja` — removed `itsdangerous` from OIDC dependencies
+
+**Migration steps:**
+1. Run `copier update` on the backend — all changed files are template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+3. **Optional:** To enable iframe embedding, set `OIDC_COOKIE_PARTITIONED=True`, `OIDC_COOKIE_SAMESITE=None`, and ensure your deployment uses HTTPS (`OIDC_COOKIE_SECURE=True` or `BASEURL=https://...`).
+4. If your app has `itsdangerous` pinned in its `pyproject.toml` for other purposes, leave it. If it was only there for OIDC, you may remove it and run `poetry lock`.
+
 ## 2026-03-01 — Frontend v0.13.3
 
 ### Frontend: Increase nginx upload size limit to 50 MB
