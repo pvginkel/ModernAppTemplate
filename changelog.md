@@ -8,6 +8,55 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-07 — Frontend v0.14.0
+
+### Frontend: SseGate component, SSE auto-connect fix, test improvements
+
+**What changed:** Four related improvements to SSE and test infrastructure:
+
+1. **New `SseGate` component** (`src/components/sse/sse-gate.tsx`). Blocks rendering of children until the SSE connection is established. Used in `SseProviders` to ensure the app only renders once SSE is ready.
+
+2. **SSE auto-connect in all modes.** Removed the `hasSharedWorkerParam`/`shouldAutoConnect` guard in `sse-context-provider.tsx` that was preventing SSE from auto-connecting in test mode. SSE now connects unconditionally on mount.
+
+3. **Infrastructure tests use `fixtures-infrastructure` directly.** `tests/infrastructure/auth/auth.spec.ts` and `tests/infrastructure/test-infrastructure.spec.ts` now import from `fixtures-infrastructure` instead of `fixtures`. Infrastructure tests should not depend on app-specific domain fixtures.
+
+4. **Auth tests use `roles: ['editor']` and 401 tests re-enabled.** All `auth.createSession()` calls in infrastructure auth tests now pass `roles: ['editor']` to match role-gated backends. The two previously-skipped 401 redirect tests are now enabled using `auth.forceError(401)` to reliably trigger the redirect flow.
+
+Frontend template files changed:
+- `template/src/components/sse/sse-gate.tsx` — new file
+- `template/src/providers/sse-providers.tsx` — wraps `DeploymentProvider` in `SseGate`
+- `template/src/contexts/sse-context-provider.tsx` — removed `shouldAutoConnect` guard
+- `template/tests/infrastructure/auth/auth.spec.ts` — `fixtures-infrastructure` import, `roles: ['editor']`, re-enabled 401 tests
+- `template/tests/infrastructure/auth/auth-shell.spec.ts` — `roles: ['editor']` on all sessions
+- `template/tests/infrastructure/test-infrastructure.spec.ts` — `fixtures-infrastructure` import
+- `copier.yml` — exclude `src/components/sse` when `use_sse=false`
+- `template/knip-template-ignore.json` — added `src/components/sse/**`
+
+**Migration steps:**
+1. Run `copier update` on the frontend — all changed files are template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+
+## 2026-03-07 — Backend v0.11.0
+
+### Backend: Reverse proxy support (ProxyFix + Waitress trusted_proxy)
+
+**What changed:** The backend now correctly handles `X-Forwarded-*` headers from reverse proxies (nginx, ingress controllers, etc.):
+
+1. **`ProxyFix` middleware** added at the end of `create_app()`. Rewrites `request.remote_addr`, `request.url_root`, and `request.scheme` from `X-Forwarded-For`, `X-Forwarded-Host`, and `X-Forwarded-Proto` headers respectively. Configured with `x_for=1, x_host=1, x_proto=1`.
+
+2. **Waitress `trusted_proxy` settings** added to production server startup. Configures Waitress to trust proxy headers from any upstream (`trusted_proxy="*"`, `trusted_proxy_count=1`) and passes `x-forwarded-for`, `x-forwarded-proto`, and `x-forwarded-host`.
+
+3. **Debug logging in `check_authorization()`** — when a 403 is raised (no recognized role, or insufficient permissions), the user's roles, configured roles, and required roles are now logged at DEBUG level for easier diagnosis.
+
+Backend template files changed:
+- `template/app/__init__.py.jinja` — added `ProxyFix` import and middleware setup before `return app`
+- `template/run.py` — added `trusted_proxy`, `trusted_proxy_count`, `trusted_proxy_headers` to Waitress `serve()` call
+- `template/app/utils/auth.py` — added `logger.debug()` calls before both `AuthorizationException` raises in `check_authorization()`
+
+**Migration steps:**
+1. Run `copier update` on the backend — all changed files are template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+
 ## 2026-03-01 — Backend v0.10.0
 
 ### Backend: OIDC state in URL parameter + partitioned cookies (iframe support)
