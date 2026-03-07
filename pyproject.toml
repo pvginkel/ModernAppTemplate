@@ -1,0 +1,8 @@
+[tool.poetry]
+name = "modern-app-template"
+version = "0.1.0"
+description = "Copier-based templates for Flask backend and React frontend projects"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.13"
