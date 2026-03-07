@@ -8,6 +8,24 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-07 — Frontend v0.14.2
+
+### Frontend: Whitelist 400 errors in Playwright console handler
+
+**What changed:** The console error handler in `fixtures-infrastructure.ts` now whitelists HTTP 400 (BAD REQUEST) responses. When OIDC is disabled in test mode, navigating to `/api/auth/login` returns 400, and the browser's error message doesn't include the URL path — so the existing `/api/auth/` filter didn't catch it.
+
+### Frontend: Make auth-shell tests conditional on SIDEBAR_VISIBLE
+
+**What changed:** `auth-shell.spec.ts` now imports `SIDEBAR_VISIBLE` from `consts.ts` and skips sidebar/hamburger tests when it's `false`. Apps with `use_app_shell=true` but `SIDEBAR_VISIBLE=false` (top bar only, no sidebar) were failing because the test assumed a hamburger button always exists.
+
+Frontend template files changed:
+- `template/tests/support/fixtures-infrastructure.ts.jinja`
+- `template/tests/infrastructure/auth/auth-shell.spec.ts`
+
+**Migration steps:**
+1. Run `copier update` on the frontend — both files are template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+
 ## 2026-03-07 — Frontend v0.14.1
 
 ### Frontend: Templatize backend-url.ts with backend_port variable
