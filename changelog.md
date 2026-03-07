@@ -8,6 +8,19 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-07 — Frontend v0.14.1
+
+### Frontend: Templatize backend-url.ts with backend_port variable
+
+**What changed:** `tests/support/backend-url.ts` is now a Jinja template (`backend-url.ts.jinja`) that renders the `DEFAULT_BACKEND_URL` using the `backend_port` copier variable instead of hardcoding port 5000. This matches how `vite.config.ts`, `nginx.conf`, and `consts.ts` already work.
+
+Frontend template files changed:
+- `template/tests/support/backend-url.ts` → `template/tests/support/backend-url.ts.jinja`
+
+**Migration steps:**
+1. Run `copier update` on the frontend — the file is template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+
 ## 2026-03-07 — Frontend v0.14.0
 
 ### Frontend: SseGate component, SSE auto-connect fix, test improvements
