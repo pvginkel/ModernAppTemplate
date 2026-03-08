@@ -156,6 +156,36 @@ def run_app(app_name):
     return results
 
 
+def _extract_pytest_failures(detail):
+    """Extract failed test names from pytest output (summary lines only)."""
+    failed = []
+    for line in detail.splitlines():
+        stripped = line.strip()
+        # Match only the summary lines: "FAILED tests/path::Class::test_name"
+        # Skip verbose progress lines: "tests/path::test FAILED [ 7%]"
+        if stripped.startswith("FAILED "):
+            failed.append(stripped)
+    return failed
+
+
+def _extract_playwright_failures(detail):
+    """Extract failed test names from playwright list reporter output."""
+    failed = []
+    for line in detail.splitlines():
+        stripped = line.strip()
+        # Skip artifact paths like "test-results/e2e-...-chromium/test-failed-1.png"
+        if "test-results/" in stripped:
+            continue
+        # Match lines like: "✘  1 [chromium] › e2e/foo.spec.ts:10:5 › describe › test (5s)"
+        if "›" in stripped and ("✘" in stripped or "[chromium]" in stripped):
+            failed.append(stripped)
+            continue
+        # Match summary count: "11 failed"
+        if stripped.endswith(" failed") and stripped.split()[0].isdigit():
+            failed.append(stripped)
+    return failed
+
+
 def format_summary(all_results):
     """Build the terse stdout summary."""
     lines = []
@@ -167,21 +197,19 @@ def format_summary(all_results):
             any_failure = True
             lines.append(f"\n{app_name}: FAILURES")
             for step, detail in failures:
-                # Extract just the key info for stdout
                 if "Skipped" in detail:
                     lines.append(f"  {step}: {detail}")
                 elif step == "backend pytest":
-                    # Show failed test names
-                    for line in detail.splitlines():
-                        if "FAILED" in line:
-                            lines.append(f"  {line.strip()}")
-                    if not any("FAILED" in l for l in detail.splitlines()):
+                    extracted = _extract_pytest_failures(detail)
+                    for line in extracted:
+                        lines.append(f"  {line}")
+                    if not extracted:
                         lines.append(f"  {step}: failed (see test_results.md)")
                 elif step == "playwright":
-                    for line in detail.splitlines():
-                        if "failed" in line.lower() and ("test" in line.lower() or "›" in line):
-                            lines.append(f"  {line.strip()}")
-                    if not any("failed" in l.lower() for l in detail.splitlines()):
+                    extracted = _extract_playwright_failures(detail)
+                    for line in extracted:
+                        lines.append(f"  {line}")
+                    if not extracted:
                         lines.append(f"  {step}: failed (see test_results.md)")
                 else:
                     lines.append(f"  {step}: FAILED (see test_results.md)")
@@ -195,40 +223,42 @@ def format_summary(all_results):
     return "\n".join(lines) + "\n"
 
 
-def format_detailed(all_results):
-    """Build the detailed test_results.md content."""
-    lines = ["# Test Results\n"]
+def format_app_detailed(app_name, steps):
+    """Build the detailed test_results.md section for one app."""
+    lines = [f"## {app_name}\n"]
+    for step, ok, detail in steps:
+        status = "PASS" if ok else "FAIL"
+        lines.append(f"### {step}: {status}\n")
+        if not ok and detail and "Skipped" not in detail:
+            lines.append("```")
+            # Trim very long output to last 200 lines
+            output_lines = detail.splitlines()
+            if len(output_lines) > 200:
+                lines.append(f"... ({len(output_lines) - 200} lines trimmed) ...")
+                output_lines = output_lines[-200:]
+            lines.extend(output_lines)
+            lines.append("```\n")
+        elif not ok:
+            lines.append(f"{detail}\n")
 
-    for app_name, steps in all_results:
-        lines.append(f"## {app_name}\n")
-        for step, ok, detail in steps:
-            status = "PASS" if ok else "FAIL"
-            lines.append(f"### {step}: {status}\n")
-            if not ok and detail and "Skipped" not in detail:
-                lines.append("```")
-                # Trim very long output to last 200 lines
-                output_lines = detail.splitlines()
-                if len(output_lines) > 200:
-                    lines.append(f"... ({len(output_lines) - 200} lines trimmed) ...")
-                    output_lines = output_lines[-200:]
-                lines.extend(output_lines)
-                lines.append("```\n")
-            elif not ok:
-                lines.append(f"{detail}\n")
-
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def main():
     all_results = []
+
+    # Write header immediately
+    RESULTS_FILE.write_text("# Test Results\n\n")
 
     for app_name in APPS:
         progress_header(app_name)
         steps = run_app(app_name)
         all_results.append((app_name, steps))
 
-    # Write detailed results to file
-    RESULTS_FILE.write_text(format_detailed(all_results))
+        # Append this app's results incrementally
+        with RESULTS_FILE.open("a") as f:
+            f.write(format_app_detailed(app_name, steps))
+
     print(f"\nDetailed results written to {RESULTS_FILE}", file=sys.stderr)
 
     # Return summary for stdout
