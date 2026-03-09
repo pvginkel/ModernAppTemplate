@@ -8,6 +8,28 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-09 — Frontend v0.16.0
+
+### Validation pipeline improvements
+
+**What changed:** Several improvements to the validation pipeline in the frontend template:
+- Removed `validation_credential_id` from `copier.yml` — credentials are now fully app-customized in the `Jenkinsfile.validation` (which is `_skip_if_exists`)
+- Added resource requests (1 CPU, 3.5Gi memory) to the validation K8s Job
+- Enabled backend log streaming in validation entrypoint for better diagnostics
+- Added `--retries=2` to Playwright in validation entrypoint
+- Fixed Groovy parse error in validation log cleanup
+- Used `utils.cleanLog()` for validation log cleanup instead of shell sed/tr
+- Strip ANSI codes and Unicode emoji from validation.log
+
+Frontend template files changed:
+- `copier.yml` (removed `validation_credential_id` variable)
+- `template/Jenkinsfile.validation.jinja` (simplified, credentials removed from template)
+- `template/scripts/validation-entrypoint.sh` (retries, log streaming, cleanup improvements)
+
+**Migration steps:**
+1. `copier update --trust` on frontend — only updates `.copier-answers.yml` (removes `validation_credential_id`).
+2. `Jenkinsfile.validation` and `scripts/validation-entrypoint.sh` are `_skip_if_exists` — existing files won't be overwritten. If you want the new entrypoint improvements, manually update your copies from the template's `test-app/` versions.
+
 ## 2026-03-09 — Backend v0.12.0, Frontend v0.15.0
 
 ### Jenkins validation pipeline support
