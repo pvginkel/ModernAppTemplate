@@ -6,7 +6,10 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
+
+import psutil
 
 from workspace import get_repos
 
@@ -29,6 +32,60 @@ def run(args, cwd, timeout=600):
         return result.returncode == 0, combined
     except subprocess.TimeoutExpired:
         return False, f"Command timed out after {timeout}s: {' '.join(str(a) for a in args)}"
+
+
+def _get_tree_rss_bytes(pid):
+    """Get total RSS in bytes for a process and all its descendants."""
+    try:
+        parent = psutil.Process(pid)
+        total = parent.memory_info().rss
+        for child in parent.children(recursive=True):
+            try:
+                total += child.memory_info().rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return total
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return 0
+
+
+def run_tracked(args, cwd, timeout=600):
+    """Run a command, return (success, stdout+stderr, peak_memory_mb).
+
+    Like run(), but also tracks peak RSS of the process tree by polling with psutil.
+    """
+    peak_bytes = 0
+    stop_event = threading.Event()
+
+    proc = subprocess.Popen(
+        args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+    def _monitor():
+        nonlocal peak_bytes
+        while not stop_event.is_set():
+            rss = _get_tree_rss_bytes(proc.pid)
+            if rss > peak_bytes:
+                peak_bytes = rss
+            stop_event.wait(0.5)
+
+    monitor = threading.Thread(target=_monitor, daemon=True)
+    monitor.start()
+
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stop_event.set()
+        monitor.join(timeout=2)
+        return False, f"Command timed out after {timeout}s: {' '.join(str(a) for a in args)}", 0
+
+    stop_event.set()
+    monitor.join(timeout=2)
+
+    combined = stdout + stderr
+    peak_mb = peak_bytes / (1024 * 1024)
+    return proc.returncode == 0, combined, peak_mb
 
 
 COLS = 80
@@ -107,9 +164,9 @@ def run_app(app_name):
             results.append(("backend pytest", False, "Skipped (install failed)"))
         else:
             col = progress_start(f"Running {app_name} backend tests")
-            ok, detail = run(["poetry", "run", "pytest", "-v", "--tb=short"], cwd=backend, timeout=300)
+            ok, detail, peak_mb = run_tracked(["poetry", "run", "pytest", "-v", "--tb=short"], cwd=backend, timeout=300)
             progress_end(ok, col)
-            results.append(("backend pytest", ok, detail))
+            results.append(("backend pytest", ok, detail, peak_mb))
     else:
         col = progress_start(f"Installing {app_name} backend dependencies")
         progress_end(False, col)
@@ -142,12 +199,12 @@ def run_app(app_name):
                 results.append(("playwright", False, "Skipped (build failed)"))
             else:
                 col = progress_start(f"Running {app_name} playwright tests")
-                ok, detail = run(
+                ok, detail, peak_mb = run_tracked(
                     ["pnpm", "playwright", "test", "--reporter=list"],
                     cwd=frontend, timeout=600,
                 )
                 progress_end(ok, col)
-                results.append(("playwright", ok, detail))
+                results.append(("playwright", ok, detail, peak_mb))
     else:
         col = progress_start(f"Installing {app_name} frontend dependencies")
         progress_end(False, col)
@@ -186,17 +243,35 @@ def _extract_playwright_failures(detail):
     return failed
 
 
+def _unpack_step(step_tuple):
+    """Unpack a step tuple, returning (step, ok, detail, peak_mb)."""
+    if len(step_tuple) == 4:
+        return step_tuple
+    step, ok, detail = step_tuple
+    return step, ok, detail, None
+
+
+def _format_mem(peak_mb):
+    """Format peak memory for display, or empty string if not tracked."""
+    if peak_mb is not None and peak_mb > 0:
+        return f" [{peak_mb:,.0f} MB peak]"
+    return ""
+
+
 def format_summary(all_results):
     """Build the terse stdout summary."""
     lines = []
     any_failure = False
 
     for app_name, steps in all_results:
-        failures = [(step, detail) for step, ok, detail in steps if not ok]
+        failures = [(step, detail, peak_mb)
+                     for step, ok, detail, peak_mb
+                     in (_unpack_step(s) for s in steps) if not ok]
         if failures:
             any_failure = True
             lines.append(f"\n{app_name}: FAILURES")
-            for step, detail in failures:
+            for step, detail, peak_mb in failures:
+                mem = _format_mem(peak_mb)
                 if "Skipped" in detail:
                     lines.append(f"  {step}: {detail}")
                 elif step == "backend pytest":
@@ -204,18 +279,27 @@ def format_summary(all_results):
                     for line in extracted:
                         lines.append(f"  {line}")
                     if not extracted:
-                        lines.append(f"  {step}: failed (see test_results.md)")
+                        lines.append(f"  {step}: failed{mem} (see test_results.md)")
+                    elif mem:
+                        lines.append(f"  {mem.strip()}")
                 elif step == "playwright":
                     extracted = _extract_playwright_failures(detail)
                     for line in extracted:
                         lines.append(f"  {line}")
                     if not extracted:
-                        lines.append(f"  {step}: failed (see test_results.md)")
+                        lines.append(f"  {step}: failed{mem} (see test_results.md)")
+                    elif mem:
+                        lines.append(f"  {mem.strip()}")
                 else:
                     lines.append(f"  {step}: FAILED (see test_results.md)")
         else:
-            passed = ", ".join(step for step, ok, _ in steps)
-            lines.append(f"\n{app_name}: all passed ({passed})")
+            # Collect memory info for passed steps
+            mem_parts = []
+            for s in steps:
+                step, ok, detail, peak_mb = _unpack_step(s)
+                mem = _format_mem(peak_mb)
+                mem_parts.append(f"{step}{mem}")
+            lines.append(f"\n{app_name}: all passed ({', '.join(mem_parts)})")
 
     if not any_failure:
         lines.append("\nAll apps passed all steps.")
@@ -226,9 +310,11 @@ def format_summary(all_results):
 def format_app_detailed(app_name, steps):
     """Build the detailed test_results.md section for one app."""
     lines = [f"## {app_name}\n"]
-    for step, ok, detail in steps:
+    for s in steps:
+        step, ok, detail, peak_mb = _unpack_step(s)
         status = "PASS" if ok else "FAIL"
-        lines.append(f"### {step}: {status}\n")
+        mem = _format_mem(peak_mb)
+        lines.append(f"### {step}: {status}{mem}\n")
         if not ok and detail and "Skipped" not in detail:
             lines.append("```")
             # Trim very long output to last 200 lines
