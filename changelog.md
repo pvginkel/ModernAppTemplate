@@ -8,6 +8,19 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-09 — Frontend v0.14.3
+
+### Frontend: Fix useListLoadingInstrumentation not emitting ready when query data is cached on mount
+
+**What changed:** When a component mounted with query data already in the TanStack Query cache (`isLoading=false`, `isFetching=false` from the start), the `useListLoadingInstrumentation` hook never entered the loading state and therefore never transitioned to `ready`. This caused `waitForListLoading()` calls in Playwright tests to time out. The fix emits `ready` immediately on first render when data is already available.
+
+Frontend template files changed:
+- `template/src/lib/test/query-instrumentation.ts`
+
+**Migration steps:**
+1. Run `copier update` on the frontend — the file is template-maintained and will be updated automatically.
+2. No app-owned file changes required.
+
 ## 2026-03-07 — Frontend v0.14.2
 
 ### Frontend: Whitelist 400 errors in Playwright console handler
