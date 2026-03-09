@@ -8,6 +8,37 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-09 — Backend v0.12.0, Frontend v0.15.0
+
+### Jenkins validation pipeline support
+
+**What changed:** Both templates now support a Jenkins validation pipeline that runs test suites before promoting images to `:latest`. When `validation_jenkins_job` is set, the Jenkinsfile builds without tagging `:latest`, archives build metadata as a JSON artifact, and triggers a validation job. The validation job (in the frontend template) resolves the image pair, clones source repos, builds a validation Docker image, runs backend + frontend tests in a K8s Job, then promotes images and deploys Helm on success.
+
+New backend variables:
+- `validation_jenkins_job` — validation job name (empty = old build+deploy flow)
+
+New frontend variables:
+- `validation_jenkins_job` — validation job name (empty = old build+deploy flow)
+- `backend_repo_url` — backend git URL for cloning in validation
+- `backend_image_name` — backend Docker image for crane tag promotion
+- `backend_jenkins_job` — backend Jenkins job name for copyArtifacts
+- `frontend_jenkins_job` — frontend Jenkins job name for copyArtifacts
+- `validation_image_name` — validation Docker image name
+- `validation_credential_id` — Jenkins secret file credential ID for test env vars
+
+New frontend template files (all `_skip_if_exists`, excluded when `validation_jenkins_job` is empty):
+- `Jenkinsfile.validation.jinja`
+- `Dockerfile.validation`
+- `scripts/validation-entrypoint.sh`
+
+**Migration steps:**
+1. `copier update --trust` on backend — adds `validation_jenkins_job` variable. Set to your validation job name or leave empty.
+2. `copier update --trust` on frontend — adds all new variables. Provide values for your app.
+3. For apps not yet using validation: existing Jenkinsfiles are `_skip_if_exists` and won't change.
+4. For apps adopting validation: after `copier update`, manually update the existing Jenkinsfile to the new flow (or delete it and re-run `copier update` to get the template version).
+5. Create the validation Jenkins pipeline job pointing to `Jenkinsfile.validation` in the frontend repo.
+6. If the app needs test secrets (S3, OIDC, etc.), set `validation_credential_id` and create the corresponding Jenkins secret file credential.
+
 ## 2026-03-09 — Frontend v0.14.3
 
 ### Frontend: Fix useListLoadingInstrumentation not emitting ready when query data is cached on mount
