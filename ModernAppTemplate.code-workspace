@@ -5,6 +5,22 @@
       "path": ".",
     },
     {
+      "name": "DA",
+      "path": "../DesignAssistant",
+    },
+    {
+      "name": "DA-backend",
+      "path": "../DesignAssistant/backend",
+    },
+    {
+      "name": "DA-frontend",
+      "path": "../DesignAssistant/frontend",
+    },
+    {
+      "name": "DA-portal",
+      "path": "../DesignAssistant/portal",
+    },
+    {
       "name": "EI-backend",
       "path": "../ElectronicsInventory/backend",
     },
@@ -12,30 +28,30 @@
       "name": "EI-frontend",
       "path": "../ElectronicsInventory/frontend",
     },
-    {
-      "name": "IOT-backend",
-      "path": "../IoTSupport/backend",
-    },
-    {
-      "name": "IOT-frontend",
-      "path": "../IoTSupport/frontend",
-    },
-    {
-      "name": "DHCP-backend",
-      "path": "../DHCPApp/backend",
-    },
-    {
-      "name": "DHCP-frontend",
-      "path": "../DHCPApp/frontend",
-    },
-    {
-      "name": "ZC-backend",
-      "path": "../ZigbeeControl/backend",
-    },
-    {
-      "name": "ZC-frontend",
-      "path": "../ZigbeeControl/frontend",
-    },
+    // {
+    //   "name": "IOT-backend",
+    //   "path": "../IoTSupport/backend",
+    // },
+    // {
+    //   "name": "IOT-frontend",
+    //   "path": "../IoTSupport/frontend",
+    // },
+    // {
+    //   "name": "DHCP-backend",
+    //   "path": "../DHCPApp/backend",
+    // },
+    // {
+    //   "name": "DHCP-frontend",
+    //   "path": "../DHCPApp/frontend",
+    // },
+    // {
+    //   "name": "ZC-backend",
+    //   "path": "../ZigbeeControl/backend",
+    // },
+    // {
+    //   "name": "ZC-frontend",
+    //   "path": "../ZigbeeControl/frontend",
+    // },
   ],
   "settings": {
     "files.exclude": {

@@ -17,9 +17,8 @@ services:
       - ${HOME}/.gitconfig:/home/ubuntu/.gitconfig:ro
       - ${HOME}/.cache:/home/ubuntu/.cache:rw
       - .:/work/ModernAppTemplate:rw
+      - ../DesignAssistant:/work/DesignAssistant:rw
       - ../ElectronicsInventory:/work/ElectronicsInventory:rw
       - ../IoTSupport:/work/IoTSupport:rw
       - ../ZigbeeControl:/work/ZigbeeControl:rw
       - ../DHCPApp:/work/DHCPApp:rw
-    # Required for Chromium
-    shm_size: 1G
