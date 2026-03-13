@@ -9,8 +9,9 @@ WORKSPACE_FILE = Path(__file__).resolve().parent.parent / "ModernAppTemplate.cod
 
 def get_repos():
     """Return list of (name, path) for each git repo in the workspace."""
-    # Strip trailing commas (JSONC) before parsing
+    # Strip JSONC features (comments, trailing commas) before parsing
     text = WORKSPACE_FILE.read_text()
+    text = re.sub(r"//[^\n]*", "", text)
     text = re.sub(r",\s*([}\]])", r"\1", text)
     workspace = json.loads(text)
     workspace_dir = WORKSPACE_FILE.parent
