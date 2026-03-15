@@ -8,6 +8,30 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-15 — Frontend v0.17.0
+
+### useCopyToClipboard hook, KeyValueBadge copy support, grouped sidebar navigation
+
+**What changed:**
+
+1. **New `useCopyToClipboard` hook** (`src/hooks/use-copy-to-clipboard.ts`) — Reusable hook for clipboard copy with visual feedback. Returns `{ copyState, copy, reset }` where `copyState` cycles through `'idle' → 'success'/'error' → 'idle'` with a configurable reset delay (default 1500ms). Eliminates duplicated clipboard logic across components.
+
+2. **`KeyValueBadge` copy support** (`src/components/ui/key-value-badge.tsx`) — New optional `copyValue` prop. When provided, hovering the badge reveals a copy icon; clicking copies the value to clipboard with success/error feedback. Uses the new `useCopyToClipboard` hook. (Note: `src/components/ui/` is `_skip_if_exists` — existing apps must manually update their copies.)
+
+3. **Grouped sidebar navigation** (`src/components/layout/sidebar.tsx`) — `SidebarItem` now supports an optional `children` array for grouped navigation. Child items render indented below the parent, hidden when sidebar is collapsed. Parent highlights when any child route is active. Backward-compatible — items without `children` render identically to before.
+
+Frontend template files changed:
+- `src/hooks/use-copy-to-clipboard.ts` (new)
+- `src/components/ui/key-value-badge.tsx` (updated — `_skip_if_exists`, won't auto-update)
+- `src/components/layout/sidebar.tsx` (updated — template-owned, will auto-update)
+- `knip-template-ignore.json` (updated)
+
+**Migration steps:**
+1. `copier update --trust` on frontend — updates sidebar.tsx (template-owned) and knip-template-ignore.json automatically.
+2. **KeyValueBadge**: If your app uses `key-value-badge.tsx` with inline clipboard logic (like EI), refactor to use `useCopyToClipboard` hook. The template version is `_skip_if_exists` so won't overwrite your copy.
+3. **Grouped sidebar**: No action needed unless your app has customized `sidebar.tsx` — copier's three-way merge will apply the changes. If you have grouped nav items, add `children` arrays to your `sidebar-nav.ts`.
+4. Any component with duplicated clipboard logic can now use `import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'` instead.
+
 ## 2026-03-09 — Frontend v0.16.0
 
 ### Validation pipeline improvements
