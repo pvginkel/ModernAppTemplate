@@ -18,9 +18,6 @@ def get_repos():
 
     repos = []
 
-    repos.append(("frontend", "frontend"))
-    repos.append(("backend", "backend"))
-
     for folder in workspace["folders"]:
         path = (workspace_dir / folder["path"]).resolve()
         name = folder.get("name", path.name)

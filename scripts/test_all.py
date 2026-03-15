@@ -16,7 +16,7 @@ from workspace import get_repos
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent          # ModernAppTemplate/
 WORK = REPO_ROOT.parent                # parent of ModernAppTemplate (e.g. /work)
-APPS = ["ElectronicsInventory", "IoTSupport", "DHCPApp", "ZigbeeControl"]
+APPS = ["ElectronicsInventory", "IoTSupport", "DHCPApp", "ZigbeeControl", "DesignAssistant"]
 RESULTS_FILE = REPO_ROOT / "test_results.md"
 
 HAS_PYTHON313 = shutil.which("python3.13") is not None
@@ -130,85 +130,110 @@ def progress_header(app_name):
     print(_c(BOLD, f" --- {app_name} ---"), file=sys.stderr, flush=True)
 
 
+def _discover_components(app_dir):
+    """Discover backend and frontend components in an app directory.
+
+    Scans immediate subdirectories for pyproject.toml (backend) or
+    package.json (frontend).  Returns a sorted list of (name, path, kind)
+    tuples with backends before frontends.
+    """
+    backends = []
+    frontends = []
+    for child in sorted(app_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        if (child / "pyproject.toml").exists():
+            backends.append((child.name, child, "backend"))
+        elif (child / "package.json").exists():
+            frontends.append((child.name, child, "frontend"))
+    return backends + frontends
+
+
+def _run_backend(app_name, label, path, results):
+    """Install and test a backend component."""
+    col = progress_start(f"Installing {app_name} {label} dependencies")
+    cmds = []
+    if HAS_PYTHON313:
+        cmds.append(["poetry", "env", "use", "python3.13"])
+    cmds.append(["poetry", "install", "--no-interaction"])
+
+    ok = True
+    detail = ""
+    for cmd in cmds:
+        ok, detail = run(cmd, cwd=path)
+        if not ok:
+            if "lock" in detail.lower() or "locked" in detail.lower():
+                run(["poetry", "lock", "--no-update", "--no-interaction"], cwd=path, timeout=300)
+                ok, detail = run(cmd, cwd=path)
+        if not ok:
+            break
+    progress_end(ok, col)
+
+    results.append((f"{label} install", ok, detail))
+    if not ok:
+        col = progress_start(f"Running {app_name} {label} tests")
+        progress_skip(col)
+        results.append((f"{label} pytest", False, "Skipped (install failed)"))
+    else:
+        col = progress_start(f"Running {app_name} {label} tests")
+        ok, detail, peak_mb = run_tracked(["poetry", "run", "pytest", "-v", "--tb=short"], cwd=path, timeout=300)
+        progress_end(ok, col)
+        results.append((f"{label} pytest", ok, detail, peak_mb))
+
+
+def _run_frontend(app_name, label, path, results):
+    """Install, build, and test a frontend component."""
+    col = progress_start(f"Installing {app_name} {label} dependencies")
+    pnpm_install = ["pnpm", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"]
+    ok, detail = run(pnpm_install, cwd=path, timeout=120)
+    if not ok:
+        ok, detail = run(["pnpm", "install", "--config.confirmModulesPurge=false"], cwd=path, timeout=120)
+    progress_end(ok, col)
+    results.append((f"{label} install", ok, detail))
+
+    if not ok:
+        for step in (f"{label} build", f"{label} playwright"):
+            col = progress_start(f"{'Building' if 'build' in step else 'Running'} {app_name} {step}")
+            progress_skip(col)
+            results.append((step, False, "Skipped (install failed)"))
+        return
+
+    col = progress_start(f"Building {app_name} {label}")
+    ok, detail = run(["pnpm", "build"], cwd=path, timeout=300)
+    progress_end(ok, col)
+    results.append((f"{label} build", ok, detail))
+
+    if not ok:
+        col = progress_start(f"Running {app_name} {label} playwright tests")
+        progress_skip(col)
+        results.append((f"{label} playwright", False, "Skipped (build failed)"))
+    else:
+        col = progress_start(f"Running {app_name} {label} playwright tests")
+        ok, detail, peak_mb = run_tracked(
+            ["pnpm", "playwright", "test", "--reporter=list"],
+            cwd=path, timeout=600,
+        )
+        progress_end(ok, col)
+        results.append((f"{label} playwright", ok, detail, peak_mb))
+
+
 def run_app(app_name):
     """Run all steps for one app. Returns list of (step, passed, detail)."""
-    backend = WORK / app_name / "backend"
-    frontend = WORK / app_name / "frontend"
+    app_dir = WORK / app_name
+    components = _discover_components(app_dir)
     results = []
 
-    # --- Backend ---
-    if backend.is_dir():
-        # poetry install
-        col = progress_start(f"Installing {app_name} backend dependencies")
-        cmds = []
-        if HAS_PYTHON313:
-            cmds.append(["poetry", "env", "use", "python3.13"])
-        cmds.append(["poetry", "install", "--no-interaction"])
-
-        ok = True
-        detail = ""
-        for cmd in cmds:
-            ok, detail = run(cmd, cwd=backend)
-            if not ok:
-                if "lock" in detail.lower() or "locked" in detail.lower():
-                    run(["poetry", "lock", "--no-update", "--no-interaction"], cwd=backend, timeout=300)
-                    ok, detail = run(cmd, cwd=backend)
-            if not ok:
-                break
-        progress_end(ok, col)
-
-        results.append(("backend install", ok, detail))
-        if not ok:
-            col = progress_start(f"Running {app_name} backend tests")
-            progress_skip(col)
-            results.append(("backend pytest", False, "Skipped (install failed)"))
-        else:
-            col = progress_start(f"Running {app_name} backend tests")
-            ok, detail, peak_mb = run_tracked(["poetry", "run", "pytest", "-v", "--tb=short"], cwd=backend, timeout=300)
-            progress_end(ok, col)
-            results.append(("backend pytest", ok, detail, peak_mb))
-    else:
-        col = progress_start(f"Installing {app_name} backend dependencies")
+    if not components:
+        col = progress_start(f"Discovering {app_name} components")
         progress_end(False, col)
-        results.append(("backend install", False, f"Directory not found: {backend}"))
+        results.append(("discover", False, f"No backend or frontend found in {app_dir}"))
+        return results
 
-    # --- Frontend ---
-    if frontend.is_dir():
-        col = progress_start(f"Installing {app_name} frontend dependencies")
-        pnpm_install = ["pnpm", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"]
-        ok, detail = run(pnpm_install, cwd=frontend, timeout=120)
-        if not ok:
-            ok, detail = run(["pnpm", "install", "--config.confirmModulesPurge=false"], cwd=frontend, timeout=120)
-        progress_end(ok, col)
-        results.append(("frontend install", ok, detail))
-
-        if not ok:
-            for label in ("frontend build", "playwright"):
-                col = progress_start(f"{'Building' if 'build' in label else 'Running'} {app_name} {label}")
-                progress_skip(col)
-                results.append((label, False, "Skipped (install failed)"))
+    for label, path, kind in components:
+        if kind == "backend":
+            _run_backend(app_name, label, path, results)
         else:
-            col = progress_start(f"Building {app_name} frontend")
-            ok, detail = run(["pnpm", "build"], cwd=frontend, timeout=300)
-            progress_end(ok, col)
-            results.append(("frontend build", ok, detail))
-
-            if not ok:
-                col = progress_start(f"Running {app_name} playwright tests")
-                progress_skip(col)
-                results.append(("playwright", False, "Skipped (build failed)"))
-            else:
-                col = progress_start(f"Running {app_name} playwright tests")
-                ok, detail, peak_mb = run_tracked(
-                    ["pnpm", "playwright", "test", "--reporter=list"],
-                    cwd=frontend, timeout=600,
-                )
-                progress_end(ok, col)
-                results.append(("playwright", ok, detail, peak_mb))
-    else:
-        col = progress_start(f"Installing {app_name} frontend dependencies")
-        progress_end(False, col)
-        results.append(("frontend install", False, f"Directory not found: {frontend}"))
+            _run_frontend(app_name, label, path, results)
 
     return results
 
@@ -274,7 +299,7 @@ def format_summary(all_results):
                 mem = _format_mem(peak_mb)
                 if "Skipped" in detail:
                     lines.append(f"  {step}: {detail}")
-                elif step == "backend pytest":
+                elif step.endswith(" pytest"):
                     extracted = _extract_pytest_failures(detail)
                     for line in extracted:
                         lines.append(f"  {line}")
@@ -282,7 +307,7 @@ def format_summary(all_results):
                         lines.append(f"  {step}: failed{mem} (see test_results.md)")
                     elif mem:
                         lines.append(f"  {mem.strip()}")
-                elif step == "playwright":
+                elif step.endswith(" playwright"):
                     extracted = _extract_playwright_failures(detail)
                     for line in extracted:
                         lines.append(f"  {line}")
