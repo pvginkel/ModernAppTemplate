@@ -8,6 +8,18 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-15 — Frontend v0.17.1
+
+### fetch-openapi.js BACKEND_PORT env var override
+
+**What changed:** `scripts/fetch-openapi.js` now reads `process.env.PORT` as a fallback before the copier-rendered `backend_port`. This allows overriding the backend port at runtime without editing the file. Extracted from DesignAssistant.
+
+Frontend template files changed:
+- `scripts/fetch-openapi.js.jinja` (template-owned, auto-updated by copier)
+
+**Migration steps:**
+1. `copier update --trust` on frontend — `fetch-openapi.js` is template-owned (Jinja-rendered) and will be updated automatically.
+
 ## 2026-03-15 — Frontend v0.17.0
 
 ### useCopyToClipboard hook, KeyValueBadge copy support, grouped sidebar navigation
