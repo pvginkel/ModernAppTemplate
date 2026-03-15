@@ -91,10 +91,12 @@ With the template updated (Phases 2-3 complete):
    - Test utilities → `tests/conftest.py` or app-specific test helpers
 6. Run the app's full test suite.
 7. Re-run the violation finder to confirm a clean report.
-8. **Commit both the backend and frontend repos** for the downstream app. Each is a separate git repo — don't forget either one:
+8. **Commit all repos** for the downstream app. Each is a separate git repo — don't forget any:
    ```bash
    cd /work/<App>/backend && git add -p && git commit -m "Update to backend template vX.Y.Z"
    cd /work/<App>/frontend && git add -p && git commit -m "Update to frontend template vX.Y.Z"
+   # If the app has additional frontend repos (e.g. DesignAssistant/portal):
+   cd /work/<App>/portal && git add -p && git commit -m "Update to frontend template vX.Y.Z"
    ```
 
 ### Phase 5: Document in the downstream app's CLAUDE.md
@@ -158,21 +160,22 @@ This is especially important because `copier update` only overwrites template-ow
 
 ---
 
-## Current Status (2026-02-20)
+## Current Status (2026-03-15)
 
-All 4 apps are synced to the latest template versions:
+All 5 apps (6 frontends) are synced to the latest template versions:
 
 | App | Backend | Frontend | Notes |
 |-----|---------|----------|-------|
-| ElectronicsInventory | v0.7.2 | v0.8 | Clean |
-| IoTSupport | v0.7.2 | Not templated | 4 pre-existing test failures (CoreDump model) |
-| ZigbeeControl | v0.7.2 | v0.8 | Clean |
-| DHCPApp | v0.7.2 | v0.8 | Clean |
+| ElectronicsInventory | v0.12.0 | v0.17.0 | Clean |
+| IoTSupport | v0.12.0 | v0.17.0 | Pre-existing lint warnings (routed-tabs, device-logs) |
+| ZigbeeControl | v0.12.0 | v0.17.0 | Clean; `use_app_shell=false` |
+| DHCPApp | v0.12.0 | v0.17.0 | Clean |
+| DesignAssistant | v0.12.0 | v0.17.0 | Has 3 repos: backend, frontend, portal |
+| DesignAssistant (portal) | — | v0.17.0 | Frontend-only; `use_app_shell=false` |
 
-Known minor deviations (all intentional, will merge cleanly on next update):
-- EI/IoTSupport/ZigbeeControl: `.gitignore` has `.claude/` added post-update (matches template)
-- IoTSupport: `metrics_service.py` trailing newline removed post-update (matches template)
-- EI: `alembic/versions/.gitkeep` and `scripts/dev-sse-gateway.sh` missing (copier three-way merge doesn't add files the app never had)
+### Apps with multiple frontend repos
+
+DesignAssistant has a **portal** (`/work/DesignAssistant/portal`) in addition to the main frontend. The portal is a separate git repo generated from the same frontend template. When syncing, run `copier update` and commit each frontend repo independently.
 
 ---
 
