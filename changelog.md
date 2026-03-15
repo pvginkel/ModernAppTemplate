@@ -8,6 +8,28 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-03-15 — Frontend v0.18.0
+
+### UI components now template-owned
+
+**What changed:** The `src/components/ui/` directory is no longer fully `_skip_if_exists`. Only `src/components/ui/index.ts` remains app-owned (for managing re-exports of app-specific additions). All other template UI components (badge, skeleton, empty-state, key-value-badge, etc.) are now template-owned and will be updated by `copier update`.
+
+Additionally:
+- **Skeleton**: Now accepts optional `className` prop for additional styling (margin, etc.)
+- **EmptyState**: `action` prop now accepts `ReactNode` in addition to `ActionConfig`, supporting custom action elements like `<Link><Button>...</Button></Link>`
+
+Frontend template files changed:
+- `copier.yml` (`_skip_if_exists` changed from `src/components/ui` to `src/components/ui/index.ts`)
+- `src/components/ui/skeleton.tsx` (added `className` prop)
+- `src/components/ui/empty-state.tsx` (action accepts `ReactNode | ActionConfig`)
+
+**Migration steps:**
+1. `copier update --trust` on frontend — skeleton.tsx and empty-state.tsx will be updated automatically.
+2. If your app has **customized any template ui component** (other than index.ts), the three-way merge will attempt to reconcile. Review merge results carefully.
+3. If your app uses Skeleton with `className` for sizing (e.g. `className="h-12 w-full"`), refactor to `height="h-12" width="w-full"`. Use `className` only for non-size styling like margins.
+4. If your app uses EmptyState with `data-testid`, change to `testId`.
+5. Apps can still **add their own components** to `src/components/ui/` — copier only manages the files defined in the template. Update `index.ts` to export your additions.
+
 ## 2026-03-15 — Frontend v0.17.1
 
 ### fetch-openapi.js BACKEND_PORT env var override
