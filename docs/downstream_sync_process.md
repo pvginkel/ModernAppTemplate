@@ -193,5 +193,8 @@ After completing a feature in a downstream app, before merging:
 2. If any violations → classify into the three buckets and act accordingly
 3. This can be a PR review checklist item
 
+### Code health ignore files
+Downstream apps may have a `.codehealthignore` file in each project root (e.g., `backend/.codehealthignore`, `frontend/.codehealthignore`) that excludes template-owned files from code health analysis. This prevents duplication reports from flagging template-sourced files across apps. When syncing, keep these files up to date: if the template adds or removes files, update the corresponding `.codehealthignore` entries to match.
+
 ### Periodic sync cadence
 Even without active feature work, run the violation finder monthly to catch drift early. Smaller, more frequent syncs are easier than large catch-up sessions.
