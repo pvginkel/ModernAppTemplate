@@ -8,6 +8,27 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-06-05 — Frontend v0.19.0
+
+### Validation runs on the prebaked Playwright image; no per-build validation image
+
+**What changed:** The validation pipeline no longer builds a `Dockerfile.validation` image with kaniko. Instead, `Jenkinsfile.validation` resolves the Playwright version from `frontend-src/pnpm-lock.yaml`, runs the validation Job directly on `registry:5000/modern-app-dev-playwright:playwright-<version>` (browsers prebaked), and streams the source into the Job via `tar` + `kubectl cp`.
+
+This fixes validation jobs hanging after `playwright install` downloaded Chromium on the plain `modern-app-dev` base image. The Job runs as `runAsUser: 1000` so the prebaked browser cache (owned by `ubuntu`) is found, and results are copied out of the still-running pod via `kubectl cp` instead of the base64-in-logs hack. The source now extracts to `/work/backend-src` and `/work/frontend-src`.
+
+This requires the `modern-app-dev-playwright` image to be published for the Playwright version pinned in the app's lockfile (currently `1.58.2`).
+
+Frontend template files changed:
+- `template/Jenkinsfile.validation.jinja` (rewrote the `Run validation` stage; dropped the `Build validation image` kaniko stage)
+- `template/scripts/validation-entrypoint.sh` (reads `/work/backend-src` and `/work/frontend-src`; dropped the base64 JUnit export trap — results now leave via `kubectl cp`)
+- `template/Dockerfile.validation` (removed)
+- `copier.yml` (removed `Dockerfile.validation` from `_skip_if_exists` and `_exclude`; removed the now-unused `validation_image_name` variable; updated `generate_validation_pipeline` help text)
+
+**Migration steps:**
+1. `copier update --trust` on the frontend — `Jenkinsfile.validation` and `scripts/validation-entrypoint.sh` update and `Dockerfile.validation` is deleted. The `validation_image_name` answer is dropped automatically.
+2. Ensure `registry:5000/modern-app-dev-playwright` is published for the Playwright version in your `pnpm-lock.yaml`. If your app pins a version with no published image, bump to a published one or have the image built for it.
+3. If your app's validation Job injects extra env/secrets (e.g. S3, Keycloak, Elasticsearch), re-add them to the new Job spec — the template's validation Job ships no app-specific env by default.
+
 ## 2026-03-15 — Frontend v0.18.0
 
 ### UI components now template-owned
