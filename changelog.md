@@ -8,6 +8,19 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-06-05 — Frontend v0.19.1
+
+### Fix: validation extracts source to /work/backend and /work/frontend
+
+**What changed:** The v0.19.0 streaming validation extracted the source to `/work/backend-src` and `/work/frontend-src`. That broke the Playwright test harness: `tests/support/process/servers.ts` resolves the backend repo root as `<frontendRoot>/../backend`, so it spawns `/work/backend/scripts/testing-server.sh` — which didn't exist (`spawn … ENOENT`). The Job now renames the extracted dirs to `/work/backend` and `/work/frontend` (the same sibling layout the old `Dockerfile.validation` produced via `COPY`), and `validation-entrypoint.sh` `cd`s into those paths.
+
+Frontend template files changed:
+- `template/Jenkinsfile.validation.jinja` (`mv /work/backend-src /work/backend` + `mv /work/frontend-src /work/frontend` after extract)
+- `template/scripts/validation-entrypoint.sh` (`cd /work/backend` and `cd /work/frontend`)
+
+**Migration steps:**
+1. `copier update --trust` on the frontend — picks up the rename and the entrypoint paths.
+
 ## 2026-06-05 — Frontend v0.19.0
 
 ### Validation runs on the prebaked Playwright image; no per-build validation image
