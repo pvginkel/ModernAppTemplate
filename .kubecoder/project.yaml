@@ -1,0 +1,12 @@
+# Curated entry points for ModernAppTemplate — the meta repo.
+#
+# The two Copier templates are separate repositories, checked out at backend/
+# and frontend/ inside this tree (see .kubecoder/config.yaml). Their build and
+# test verbs belong to those repositories, not here.
+projects:
+  root:
+    description: >-
+      Meta repo for the Copier Flask-backend and React-frontend templates:
+      the shared docs, the coordinated changelog, and the cross-repo scripts in
+      scripts/. The templates themselves are checked out at backend/ and
+      frontend/, each with its own git repo.

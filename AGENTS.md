@@ -17,7 +17,6 @@ ModernAppTemplate/                  # Parent repo (you are here)
 ├── scripts/
 │   └── find_template_violations.py # Finds template drift in downstream apps
 ├── changelog.md                    # Coordinated changelog (both templates)
-├── validate.sh                     # Regenerate + test both templates
 ├── backend/                        # Checkout of ModernAppBackendTemplate (NOT a submodule)
 └── frontend/                       # Checkout of ModernAppFrontendTemplate (NOT a submodule)
 ```
@@ -26,12 +25,14 @@ ModernAppTemplate/                  # Parent repo (you are here)
 
 Each template repo has its own `CLAUDE.md` with template-specific instructions.
 
-## Sandbox Environment
+## Environment
 
-- This repository is bind-mounted into `/work/ModernAppTemplate` inside a container.
-- Template repos are checked out at `backend/` and `frontend/` (separate git repos, not submodules).
-- Git operations work in both the parent and the template repos.
-- The container includes poetry, node/npm, and standard toolchains.
+This repository runs in a KubeCoder environment.
+
+- The three repos live at `/work/ModernAppTemplate`, with the two template repos checked out inside it at `backend/` and `frontend/` (separate git repos, not submodules). Git operations work in all three.
+- Language tooling lives in the `modern-app` tool container: prefix Poetry, `copier` and pnpm commands with `cexec modern-app`. The dev container itself has `node`, `npm`, `python3` and `git` only.
+- `cexec` passes arguments through verbatim, so compound commands need a wrapper: `cexec modern-app sh -c 'cd test-app && poetry install'`.
+- Curated entry points are in `.kubecoder/project.yaml`, run with `kc project setup|build|test|lint`.
 
 ## Downstream Apps
 
@@ -65,25 +66,30 @@ Read these before making changes:
 ```bash
 cd /work/ModernAppTemplate/backend
 # Edit files in template/, then:
-bash regen.sh
-cd test-app && poetry run pytest ../tests/ -v && poetry run pytest tests/ -v
+cexec modern-app bash regen.sh
+cexec modern-app sh -c 'cd test-app && poetry run pytest ../tests/ -v && poetry run pytest tests/ -v'
 ```
 
 ### Working on the frontend template
 ```bash
 cd /work/ModernAppTemplate/frontend
 # Edit files in template/, then:
-bash regen.sh
-cd test-app && npm test
+cexec modern-app bash regen.sh
+cexec modern-app sh -c 'cd test-app && pnpm run check && pnpm run build'
 ```
 
 ### Validating both templates
-```bash
-cd /work/ModernAppTemplate
-bash validate.sh
-```
+
+There is no combined validation script. `validate.sh` is described in
+`docs/copier_approach.md` but was never added to this repo — run the backend
+and frontend steps above in turn.
 
 ### Syncing a downstream app
+
+The downstream app checkouts are not part of this KubeCoder environment. Add
+them to `repos:` in `.kubecoder/config.yaml` and run `kc env restart` before
+using the commands below.
+
 ```bash
 # Find violations
 python scripts/find_template_violations.py /work/<App>/backend --template-repo backend

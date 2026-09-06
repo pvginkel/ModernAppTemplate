@@ -1,0 +1,28 @@
+# ModernAppTemplate — the meta repo for the Copier backend and frontend templates.
+#
+# The two template repositories are checked out INSIDE this repo's tree, at
+# backend/ and frontend/, rather than side by side under /work. That is the
+# layout every script and document here already assumes (regen.sh's usage
+# banner, scripts/workspace.py, docs/*), and this repo's .gitignore already
+# carries /backend and /frontend, so the nested checkouts stay invisible to the
+# parent's git. Nesting is a plain `repos[].path`, which is why it is preferred
+# over symlinking the two from /work in `setup:`.
+repos:
+  - url: https://github.com/pvginkel/ModernAppBackendTemplate
+    path: ModernAppTemplate/backend
+  - url: https://github.com/pvginkel/ModernAppFrontendTemplate
+    path: ModernAppTemplate/frontend
+
+capabilities:
+  github: rw
+
+# One sidecar carrying both toolsets. Neither template is single-language: each
+# drives copier under Poetry, the backend template's test-app is a Poetry/pytest
+# project, and the frontend template's test-app is pnpm/Vite with Playwright
+# specs that run against a backend. Splitting them into `python` + `frontend`
+# would put the two halves of one command in two containers.
+tools:
+  - use: modern-app
+
+setup:
+  - kc project setup
