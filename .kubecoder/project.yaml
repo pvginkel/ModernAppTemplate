@@ -1,8 +1,32 @@
 # Curated entry points for ModernAppTemplate — the meta repo.
 #
 # The two Copier templates are separate repositories, checked out at backend/
-# and frontend/ inside this tree (see .kubecoder/config.yaml). Their build and
-# test verbs belong to those repositories, not here.
+# and frontend/ inside this tree (see .kubecoder/config.yaml). Neither carries a
+# .kubecoder/project.yaml of its own yet, so the `setup:` that makes a fresh
+# environment workable lives here: both template repos need their Poetry env
+# (which is what provides `copier`) before regen.sh will run. Give a template
+# repo its own project.yaml when its gates go green, and drop its component
+# from this file at the same time.
+#
+# No build/test/lint verbs, deliberately. Both templates are behind and their
+# gates are red for reasons that need code changes, not environment changes:
+#
+#   backend/   `poetry run pytest ../tests/` -> 225 passed, 107 errors, and
+#              `poetry run pytest tests/`    -> 6 errors. One cause for all of
+#              them: the S3 access key committed in backend/.env.test is
+#              rejected by the Ceph radosgw at srvceph1:7480 with
+#              InvalidAccessKeyId. The endpoint itself is reachable from the
+#              modern-app sidecar; the key has been revoked.
+#
+#   frontend/  `pnpm run check` and `pnpm run build` -> 1 eslint error, in
+#              template-owned src/components/primitives/debounced-search-input.tsx:
+#              react-hooks/set-state-in-effect. The template pins
+#              eslint-plugin-react-hooks to "^7.0.1" and ships no lockfile, so
+#              regen.sh resolves 7.1.1, whose rule the template's own code
+#              trips.
+#
+# Wiring either in would make `kc project test` red out of the box and hide
+# real regressions behind known ones.
 projects:
   root:
     description: >-
@@ -10,3 +34,16 @@ projects:
       the shared docs, the coordinated changelog, and the cross-repo scripts in
       scripts/. The templates themselves are checked out at backend/ and
       frontend/, each with its own git repo.
+
+  backend:
+    description: >-
+      ModernAppBackendTemplate — the Copier template for Flask backends. Work
+      in template/, then `cexec modern-app bash regen.sh` to rebuild test-app.
+    setup: cexec modern-app poetry install --no-interaction
+
+  frontend:
+    description: >-
+      ModernAppFrontendTemplate — the Copier template for React/Vite frontends.
+      Work in template/, then `cexec modern-app bash regen.sh` to rebuild
+      test-app.
+    setup: cexec modern-app poetry install --no-interaction
