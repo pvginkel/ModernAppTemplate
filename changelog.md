@@ -8,6 +8,43 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-26 — Root v0.1.0, Backend v0.13.0, Frontend v0.20.0
+
+### Monorepo: a root template, and per-repo CI leaves the component templates
+
+**What changed:** The apps are monorepos (backend and frontend in one repo, one CI pipeline). A third template now generates the root layer, and the backend and frontend templates stop generating the per-repo CI and Docker-era scripts that the conversion made dead.
+
+**Root template (new, v0.1.0).** Lives in this repo: `copier.yml` at the root, the template in `root/template/`, versioned by this repo's tags. Generates:
+- Template-owned: `Jenkinsfile` (validation Job on `modern-app-dev-playwright:playwright-<version>` running `run-suite`, RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo), `tools/suite_runner/` (`run-suite`), `Procfile.dev`, `scripts/dev.py`, `scripts/dev-sse-gateway.sh` (`use_sse`), `.gitignore`, `.vscode/settings.json`.
+- Generated once (`_skip_if_exists`): `pyproject.toml` (with the pinned `[tool.ruff]` and ruff dev group), `CLAUDE.md`, `<repo_name>.code-workspace`, `scripts/regenerate-openapi.py`, `.kubecoder/config.yaml`, `.kubecoder/project.yaml`.
+- The suite runner runs `backend/scripts/wait-for-services.py` after the backend install when that file exists — the hook for CI sidecars that are slow to come up.
+
+**Backend v0.13.0:**
+- Removed: `Jenkinsfile`, `scripts/{args,build,push,run,stop}.sh`, `scripts/dev-sse-gateway.sh` (now root), and the `repo_url`, `image_name`, `validation_jenkins_job` questions.
+- `scripts/testing-server.sh` has its own default port instead of sourcing `args.sh`.
+- Flask 3 typing: `types-flask` dropped from the scaffold `pyproject.toml`; `app/app.py` gains `current_container()` (and declares `diagnostics_service` with `use_database`); `dict[str, Any]` health checks; App-typed CLI handlers; `BaseException` in `close_session`; `ProxyFix` assignment marked `method-assign`.
+- New `app/utils/after_commit.py` (`use_database`): `after_commit(callback)` runs the callback only after the request's transaction commits; `close_session` runs or drops them.
+- S3 preflight in `tests/conftest_infrastructure.py` treats any HTTP response as reachable (MinIO answers `GET /` with 403).
+- New `scripts/init-dev-database.py` (`use_database`): creates the dev database on the Postgres sidecar.
+- Flag fixes: `testing_service.py`, `spectree_config.py`, `vulture_whitelist.py` and `flask_error_handlers.py` docstrings are feature-gated; `app/models` is excluded without `use_database`.
+- Scaffold fixes for new apps: `README.md` (poetry install needs it), `.dockerignore`, `app_config.py` defines `thumbnail_storage_path` for `use_s3`, `Dockerfile` installs `--only main`, the SQLAlchemy mypy plugin is gone (removed in SQLAlchemy 2.1).
+
+**Frontend v0.20.0:**
+- Removed: `Jenkinsfile`, `Jenkinsfile.validation`, `scripts/validation-entrypoint.sh`, and the `repo_url`, `image_name`, `backend_repo_url`, `backend_image_name`, `backend_jenkins_job`, `frontend_jenkins_job`, `validation_jenkins_job`, `generate_validation_pipeline` questions.
+- `knip.config.ts` no longer ignores `@tanstack/router-devtools` and `class-variance-authority` (unused); the scaffold `package.json` drops them, requires `@playwright/test ^1.60.0` and uses `github:pvginkel/SSEGateway#stable`.
+- `DebouncedSearchInput` syncs the URL term during render (eslint-plugin-react-hooks 7.1 rejects setState in effects).
+- New `RoutedTabs` primitive (from IoTSupport). `DialogContent` accepts `data-testid`. Vite ignores `.pnpm-store`. SegmentedTabs indicator contrast and toast alignment (from EI).
+- `global-setup.ts` runs the seed script with `OIDC_ENABLED=false`; `auth.spec.ts` redirect test uses `/` instead of `/items`.
+- `.dockerignore` scaffold.
+
+**Migration steps:**
+1. On a clean tree: `cd backend && copier update --trust --defaults`, then `cd ../frontend && copier update --trust --defaults`. Deleted template files that the app still has (e.g. `backend/scripts/build.sh`) are removed; resolve any conflicts.
+2. Adopt the root template (once): from the repo root, `copier copy --trust --defaults <path-to>/ModernAppTemplate . --vcs-ref v0.1.0` with the app's answers (`-d project_name=… -d repo_name=… -d backend_image=… -d frontend_image=… -d deploy_repo=… -d backend_image_pin_key=… -d frontend_image_pin_key=…` plus ports and flags), then review `git diff`: keep genuine app additions in the template-owned files (extra Jenkinsfile stages, extra `.gitignore` lines); the `_skip_if_exists` files are left untouched. Commit; from then on `copier update` at the root.
+3. `backend/pyproject.toml`: remove `types-flask`; remove the `sqlalchemy.ext.mypy.plugin` line if the app moves to SQLAlchemy 2.1.
+4. `frontend/package.json`: remove `@tanstack/router-devtools` and `class-variance-authority`, then `pnpm install` — knip flags them otherwise.
+5. Replace hand-edits of `close_session` in `app/__init__.py` with `after_commit()` calls from the service code.
+6. Move any sidecar wait the app does in the suite runner into `backend/scripts/wait-for-services.py`.
+
 ## 2026-06-05 — Frontend v0.19.1
 
 ### Fix: validation extracts source to /work/backend and /work/frontend
