@@ -30,6 +30,7 @@ Each template repo has its own `CLAUDE.md` with template-specific instructions.
 This repository runs in a KubeCoder environment.
 
 - The three repos live at `/work/ModernAppTemplate`, with the two template repos checked out inside it at `backend/` and `frontend/` (separate git repos, not submodules). Git operations work in all three.
+- The downstream apps (see below) are checked out at `/work/<App>`, one repo per app with the backend and frontend at `backend/` and `frontend/`.
 - Language tooling lives in the `modern-app` tool container: prefix Poetry, `copier` and pnpm commands with `cexec modern-app`. The dev container itself has `node`, `npm`, `python3` and `git` only.
 - `cexec` passes arguments through verbatim, so compound commands need a wrapper: `cexec modern-app sh -c 'cd test-app && poetry install'`.
 - Curated entry points are in `.kubecoder/project.yaml`, run with `kc project setup|build|test|lint`.
@@ -86,10 +87,6 @@ and frontend steps above in turn.
 
 ### Syncing a downstream app
 
-The downstream app checkouts are not part of this KubeCoder environment. Add
-them to `repos:` in `.kubecoder/config.yaml` and run `kc env restart` before
-using the commands below.
-
 ```bash
 # Find violations
 python scripts/find_template_violations.py /work/<App>/backend --template-repo backend
@@ -135,5 +132,5 @@ Both templates include dead code detection as part of the `check` pipeline:
 Key things to not skip:
 - Commit and tag **each template repo** that was changed (`backend/` and/or `frontend/`)
 - Commit the **parent repo** changelog
-- After `copier update`, commit **both the backend and frontend repos** of each downstream app — they are separate git repos
+- After `copier update`, commit the downstream app's repo — backend and frontend live in the same repo, so one commit per template update keeps the history readable
 - When a template change also requires editing an app-owned file (e.g. removing a dependency from `pyproject.toml`): run `copier update` first on a clean repo, then make the app-owned edits. Copier requires a clean working tree, so editing before updating forces an awkward stash/pop dance.

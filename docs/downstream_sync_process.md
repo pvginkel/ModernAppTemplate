@@ -91,10 +91,9 @@ With the template updated (Phases 2-3 complete):
    - Test utilities → `tests/conftest.py` or app-specific test helpers
 6. Run the app's full test suite.
 7. Re-run the violation finder to confirm a clean report.
-8. **Commit all repos** for the downstream app. Each is a separate git repo — don't forget any:
+8. **Commit the downstream app.** Backend and frontend live in one repo per app (`/work/<App>`):
    ```bash
-   cd /work/<App>/backend && git add -p && git commit -m "Update to backend template vX.Y.Z"
-   cd /work/<App>/frontend && git add -p && git commit -m "Update to frontend template vX.Y.Z"
+   cd /work/<App> && git add -p && git commit -m "Update to backend template vX.Y.Z / frontend template vX.Y.Z"
    # If the app has additional frontend repos (e.g. DesignAssistant/portal):
    cd /work/<App>/portal && git add -p && git commit -m "Update to frontend template vX.Y.Z"
    ```

@@ -9,6 +9,18 @@
     {
       "path": "frontend",
     },
+    {
+      "path": "../ElectronicsInventory",
+    },
+    {
+      "path": "../IoTSupport",
+    },
+    {
+      "path": "../DHCPApp",
+    },
+    {
+      "path": "../ZigbeeControl",
+    },
   ],
   "settings": {
     "files.exclude": {

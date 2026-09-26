@@ -12,6 +12,16 @@ repos:
     path: ModernAppTemplate/backend
   - url: https://github.com/pvginkel/ModernAppFrontendTemplate
     path: ModernAppTemplate/frontend
+  # Downstream apps kept in sync with the templates (see CLAUDE.md). Each is one
+  # repo carrying both halves, at backend/ and frontend/.
+  - url: https://github.com/pvginkel/ElectronicsInventory
+    path: ElectronicsInventory
+  - url: https://github.com/pvginkel/IoTSupport
+    path: IoTSupport
+  - url: https://github.com/pvginkel/DHCPApp
+    path: DHCPApp
+  - url: https://github.com/pvginkel/ZigbeeControl
+    path: ZigbeeControl
 
 capabilities:
   github: rw
