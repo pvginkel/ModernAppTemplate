@@ -1,0 +1,51 @@
+projects:
+  root:
+    description: >-
+      {{ repo_name }} monorepo — orchestration tooling (the suite runner), the
+      shared Procfile.dev dev stack, and CI.
+    setup: cexec modern-app poetry install --no-interaction
+    # The root's own Python only; backend/ and frontend/ lint themselves. The
+    # rule set and the Ruff version are pinned in the root pyproject.toml.
+    lint: cexec modern-app poetry run ruff check scripts tools
+    # No `test:` here on purpose. The root project owns `run-suite`
+    # (tools/suite_runner), which is CI's single entry point and runs the
+    # backend and frontend suites itself — declaring it here would make
+    # `kc project test` run both suites two extra times. The per-component
+    # verbs below are those same two suites, once each. CI keeps using
+    # `poetry run run-suite` because it also needs the JUnit XML, the retries
+    # and the ===SUITE_RESULT:=== markers the Jenkinsfile parses.
+
+  backend:
+    description: >-
+      {{ project_description }} — Flask backend.
+    setup:
+      - cexec modern-app poetry install --no-interaction
+{% if use_database or use_s3 %}
+      - "test -f .env || printf '{% if use_database %}DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/{{ database_name }}\\n{% endif %}{% if use_s3 %}S3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=minioadmin\\nS3_SECRET_ACCESS_KEY=minioadmin\\nS3_BUCKET_NAME={{ project_name }}-dev\\n{% endif %}' > .env"
+{% endif %}
+{% if use_s3 %}
+      - "test -f .env.test || printf 'FLASK_ENV=testing\\nS3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=minioadmin\\nS3_SECRET_ACCESS_KEY=minioadmin\\nS3_BUCKET_NAME={{ project_name }}-test\\n' > .env.test"
+{% endif %}
+{% if use_database %}
+      - cexec modern-app poetry run python scripts/init-dev-database.py
+      - cexec modern-app poetry run cli upgrade-db
+{% endif %}
+    test: cexec modern-app poetry run pytest
+    # The same three checks backend/scripts/check.py runs.
+    lint:
+      - cexec modern-app poetry run ruff check .
+      - cexec modern-app poetry run mypy .
+      - cexec modern-app poetry run vulture app/ vulture_whitelist.py --min-confidence 80
+
+  frontend:
+    description: >-
+      React SPA with a generated OpenAPI client; Playwright E2E suite that boots
+      the backend{% if use_sse %} and SSE gateway{% endif %} per worker.
+    setup:
+      - cexec modern-app pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+      - cexec modern-app pnpm playwright install chromium
+    # `pnpm build` also runs `pnpm check`; the lint verb below repeats it so the
+    # gate stands on its own.
+    build: cexec modern-app pnpm build
+    test: cexec modern-app pnpm playwright test
+    lint: cexec modern-app pnpm check

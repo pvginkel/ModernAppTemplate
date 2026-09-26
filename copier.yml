@@ -1,0 +1,116 @@
+# Root template: the monorepo layer around backend/ and frontend/.
+#
+# This file sits at the parent repo's root because Copier versions a template
+# by the git tags of the repository it lives in; the template itself is in
+# root/template. backend/ and frontend/ are generated separately from the
+# ModernAppBackendTemplate and ModernAppFrontendTemplate repos, each with its
+# own .copier-answers.yml.
+_subdirectory: root/template
+
+_envops:
+  trim_blocks: true
+  lstrip_blocks: true
+
+# ── Template variables ────────────────────────────────────────────────
+
+project_name:
+  type: str
+  help: "Project name (kebab-case), as used by the backend and frontend templates"
+
+repo_name:
+  type: str
+  help: "GitHub repository name (e.g. ElectronicsInventory); names the workspace file and the Specs repo"
+
+project_description:
+  type: str
+  default: "A Flask + React application"
+  help: "One-line description for pyproject.toml and CLAUDE.md"
+
+author_name:
+  type: str
+  help: "Author name for pyproject.toml"
+
+author_email:
+  type: str
+  help: "Author email for pyproject.toml"
+
+github_owner:
+  type: str
+  default: "pvginkel"
+  help: "GitHub owner of the app, Specs and Deploy repositories"
+
+frontend_port:
+  type: int
+  default: 3000
+  help: "Vite dev server port"
+
+backend_port:
+  type: int
+  default: "{{ frontend_port + 1 }}"
+  help: "Backend dev server port"
+
+sse_gateway_port:
+  type: int
+  default: "{{ frontend_port + 2 }}"
+  help: "SSE Gateway dev port"
+
+use_database:
+  type: bool
+  default: true
+  help: "The backend uses PostgreSQL (postgres sidecar, database bootstrap in setup)"
+
+database_name:
+  type: str
+  default: "{{ project_name | replace('-', '_') }}"
+  help: "PostgreSQL database name"
+  when: "{{ use_database }}"
+
+use_s3:
+  type: bool
+  default: false
+  help: "The backend uses S3 (S3 sidecar in the dev environment and in CI validation)"
+
+use_sse:
+  type: bool
+  default: false
+  help: "The app uses the SSE Gateway (gateway in the dev stack)"
+
+backend_image:
+  type: str
+  default: "{{ project_name }}"
+  help: "Backend image name under registry:5000"
+
+frontend_image:
+  type: str
+  default: "{{ project_name }}-ui"
+  help: "Frontend image name under registry:5000"
+
+deploy_repo:
+  type: str
+  default: "{{ github_owner }}/{{ repo_name }}Deploy"
+  help: "Argo CD deploy repository the Jenkinsfile pins the image versions into"
+
+backend_image_pin_key:
+  type: str
+  default: "{% set parts = project_name.split('-') %}{{ parts[0] }}{% for part in parts[1:] %}{{ part | capitalize }}{% endfor %}"
+  help: "Key under images. in the deploy repo's config/prd/values.yaml for the backend image"
+
+frontend_image_pin_key:
+  type: str
+  default: "{{ backend_image_pin_key }}UI"
+  help: "Key under images. in the deploy repo's config/prd/values.yaml for the frontend image"
+
+# ── Files generated once, never overwritten ───────────────────────────
+
+_skip_if_exists:
+  - "pyproject.toml"
+  - "CLAUDE.md"
+  - "*.code-workspace"
+  - "scripts/regenerate-openapi.py"
+  - ".kubecoder/config.yaml"
+  - ".kubecoder/project.yaml"
+
+# ── Feature-flagged file exclusion ────────────────────────────────────
+
+_exclude:
+  - "{% if not use_sse %}scripts/dev-sse-gateway.sh{% endif %}"

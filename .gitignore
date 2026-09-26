@@ -9,3 +9,4 @@ node_modules
 /frontend
 /.pnpm-store
 /test_results.md
+/root/test-app

@@ -1,0 +1,61 @@
+# KubeCoder environment manifest for the {{ repo_name }} monorepo.
+#
+# One sidecar rather than `python` + `frontend`: the Playwright harness boots the
+# Flask backend{% if use_sse %} and the SSE gateway{% endif %} per worker
+# (frontend/tests/support/process/servers.ts), so a single command needs both
+# toolsets in the same container.
+{% if use_database or use_s3 %}
+#
+{% endif %}
+{% if use_database %}
+# `postgres` is the dev stack's database: the backend's default DATABASE_URL
+# points at localhost:5432/{{ database_name }}, and `kc project setup` creates that
+# database and applies the migrations. The test suites never use it — the
+# backend suite runs on in-memory SQLite and the Playwright harness seeds a
+# per-worker SQLite file.
+{% endif %}
+{% if use_s3 %}
+# `minio` provides S3 on localhost:9000: the backend test fixtures hard-fail
+# when S3_ENDPOINT_URL is unreachable. CI runs its own S3 sidecar in the
+# validation Job (Jenkinsfile, "Run validation").
+{% endif %}
+#
+# No imageBuilder: both Dockerfiles are built by Jenkins with
+# helmCharts.kaniko(...), and nothing builds an image from inside this
+# environment.
+
+repos:
+  # The AI workflow's spec repository, shared across every environment that
+  # works on {{ repo_name }}.
+  - url: https://github.com/{{ github_owner }}/{{ repo_name }}Specs
+    shared: true
+
+capabilities:
+  github: rw
+
+tools:
+  - use: modern-app
+{% if use_database or use_s3 %}
+
+services:
+{% if use_database %}
+  - postgres
+{% endif %}
+{% if use_s3 %}
+  - minio
+{% endif %}
+{% endif %}
+
+ports:
+  - name: frontend
+    port: {{ frontend_port }}
+    type: http
+    sslOffload: true
+  - name: backend
+    port: {{ backend_port }}
+    type: http
+{% if use_sse %}
+  - name: sse-gateway
+    port: {{ sse_gateway_port }}
+    type: http
+{% endif %}
