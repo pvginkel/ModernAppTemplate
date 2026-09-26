@@ -8,6 +8,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-26 — Root v0.1.2
+
+### Validation Job runs in the KubeCoder modern-app toolchain image
+
+**What changed:** The `Jenkinsfile` validation Job runs in `registry:5000/kube-coder-modern-app-toolchain:node-24`, the image of the dev environment's `modern-app` sidecar, instead of `modern-app-dev-playwright:playwright-<version>`, which is retired; the lockfile lookup that picked that tag is gone. The image carries Chromium's OS dependencies but no browser, so the suite runner's `pnpm playwright install chromium` downloads Chromium on every run. It has no `/work`, so the Job mounts an emptyDir there.
+
+**Migration steps:**
+1. `copier update --trust --defaults` at the app root. App additions to the validation Job spec (extra env, sidecars) go through the three-way merge; check them in the diff.
+
 ## 2026-09-26 — Frontend v0.20.2
 
 ### Auth redirect test goes back to `/items`

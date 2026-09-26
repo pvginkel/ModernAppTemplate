@@ -71,7 +71,7 @@ The root template generates the monorepo layer that wraps the backend and fronte
 Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `sse_gateway_port` (default `frontend_port` + 2), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
 
 Template-owned (updated by `copier update`):
-- `Jenkinsfile` — validation Job on the prebaked `registry:5000/modern-app-dev-playwright:playwright-<version>` image running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
+- `Jenkinsfile` — validation Job on `registry:5000/kube-coder-modern-app-toolchain:node-24` (the `modern-app` sidecar's image; no browser, `run-suite` downloads Chromium) running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
 - `tools/suite_runner/` — the `run-suite` test orchestrator, same command locally and in CI
 - `Procfile.dev`
 - `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
