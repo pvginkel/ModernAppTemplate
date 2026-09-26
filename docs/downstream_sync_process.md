@@ -92,13 +92,13 @@ With the template updated (Phases 2-3 complete):
 1. **Read `changelog.md`** to understand all template changes and their migration steps. This is the primary guide for what needs to happen during the update.
 2. Run `copier update` per component — root, backend, frontend — each against a clean working tree, committing between them since copier needs the whole monorepo's tree clean:
    ```bash
-   # copier lives in the template repos' Poetry env, in the modern-app tool container
-   cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>
-   cd /work/<App> && git add -A && git commit -m "Update to root template vX.Y.Z"
-   cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/backend
-   cd /work/<App> && git add -A backend && git commit -m "Update to backend template vX.Y.Z"
-   cd /work/ModernAppTemplate/frontend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/frontend
-   cd /work/<App> && git add -A frontend && git commit -m "Update to frontend template vX.Y.Z"
+   # copier lives in the backend template's Poetry env, in the modern-app tool
+   # container. Run it from the component's directory: copier resolves the
+   # relative _src_path in .copier-answers.yml against the current directory.
+   COPIER="cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults"
+   cd /work/<App>          && $COPIER && git add -A && git commit -m "Update to root template vX.Y.Z"
+   cd /work/<App>/backend  && $COPIER && git add -A . && git commit -m "Update to backend template vX.Y.Z"
+   cd /work/<App>/frontend && $COPIER && git add -A . && git commit -m "Update to frontend template vX.Y.Z"
    ```
 3. Resolve any merge conflicts. Template-owned files should now accept the template's version cleanly, since the good changes were upstreamed. For `_skip_if_exists` files, copier may still produce merge conflicts or `*.rej` files when a template later adds a file the app already has — keep the app's version and delete the `.rej` files.
 4. Follow the migration steps from `changelog.md` for each entry since the app's current `_commit`.

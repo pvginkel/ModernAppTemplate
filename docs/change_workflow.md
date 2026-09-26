@@ -287,8 +287,11 @@ Tags are required for `copier update` to work — downstream apps reference the 
 Use `copier update` to propagate changes to all downstream apps. **Never manually copy template-owned files** — this bypasses Copier's conflict resolution and `_skip_if_exists` protections.
 
 ```bash
-cd /work/<ProjectName>/backend
-poetry run copier update --trust --defaults
+# From the component's directory (/work/<App>, /work/<App>/backend or
+# /work/<App>/frontend): copier resolves the relative _src_path against the
+# current directory. copier comes from the backend template's Poetry env.
+cd /work/<App>/backend
+cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
 ```
 
 After the update:
@@ -349,8 +352,8 @@ git add . && git commit -m "Fix auth/self endpoint"
 git tag v0.X
 
 # 6. Update downstream apps
-cd /work/IoTSupport/backend && copier update --trust --defaults
-cd /work/ElectronicsInventory/backend && copier update --trust --defaults
+cd /work/IoTSupport/backend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+cd /work/ElectronicsInventory/backend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
 # Run tests in each...
 ```
 

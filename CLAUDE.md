@@ -107,10 +107,12 @@ python scripts/find_template_violations.py /work/<App>/backend --template-repo b
 python scripts/find_template_violations.py /work/<App>/frontend --template-repo frontend
 
 # Update app from template (each run needs a clean tree; commit between them).
-# copier comes from the template repos' Poetry env; the parent repo has none.
-cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>
-cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/backend
-cd /work/ModernAppTemplate/frontend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/frontend
+# Run copier from the component's own directory: it resolves the relative
+# _src_path in .copier-answers.yml against the current directory. copier comes
+# from the backend template's Poetry env (the parent repo has none).
+cd /work/<App>          && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+cd /work/<App>/backend  && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+cd /work/<App>/frontend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
 ```
 
 ## S3 Storage
