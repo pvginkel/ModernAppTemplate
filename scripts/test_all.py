@@ -16,7 +16,7 @@ from workspace import get_repos
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent          # ModernAppTemplate/
 WORK = REPO_ROOT.parent                # parent of ModernAppTemplate (e.g. /work)
-APPS = ["ElectronicsInventory", "IoTSupport", "DHCPApp", "ZigbeeControl", "DesignAssistant"]
+APPS = ["ElectronicsInventory", "IoTSupport", "DHCPApp", "ZigbeeControl"]
 RESULTS_FILE = REPO_ROOT / "test_results.md"
 
 HAS_PYTHON313 = shutil.which("python3.13") is not None

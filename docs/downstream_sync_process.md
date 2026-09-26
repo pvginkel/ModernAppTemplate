@@ -94,8 +94,6 @@ With the template updated (Phases 2-3 complete):
 8. **Commit the downstream app.** Backend and frontend live in one repo per app (`/work/<App>`):
    ```bash
    cd /work/<App> && git add -p && git commit -m "Update to backend template vX.Y.Z / frontend template vX.Y.Z"
-   # If the app has additional frontend repos (e.g. DesignAssistant/portal):
-   cd /work/<App>/portal && git add -p && git commit -m "Update to frontend template vX.Y.Z"
    ```
 
 ### Phase 5: Document in the downstream app's CLAUDE.md
@@ -161,7 +159,7 @@ This is especially important because `copier update` only overwrites template-ow
 
 ## Current Status (2026-03-15)
 
-All 5 apps (6 frontends) are synced to the latest template versions:
+All apps were synced to the latest template versions:
 
 | App | Backend | Frontend | Notes |
 |-----|---------|----------|-------|
@@ -169,12 +167,8 @@ All 5 apps (6 frontends) are synced to the latest template versions:
 | IoTSupport | v0.12.0 | v0.17.0 | Pre-existing lint warnings (routed-tabs, device-logs) |
 | ZigbeeControl | v0.12.0 | v0.17.0 | Clean; `use_app_shell=false` |
 | DHCPApp | v0.12.0 | v0.17.0 | Clean |
-| DesignAssistant | v0.12.0 | v0.17.0 | Has 3 repos: backend, frontend, portal |
-| DesignAssistant (portal) | — | v0.17.0 | Frontend-only; `use_app_shell=false` |
 
-### Apps with multiple frontend repos
-
-DesignAssistant has a **portal** (`/work/DesignAssistant/portal`) in addition to the main frontend. The portal is a separate git repo generated from the same frontend template. When syncing, run `copier update` and commit each frontend repo independently.
+DesignAssistant is no longer part of the sync: the project is archived.
 
 ---
 
