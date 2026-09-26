@@ -8,6 +8,19 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-26 — Backend v0.13.1, v0.13.2, Frontend v0.20.1
+
+### Patch releases found while updating the apps
+
+**What changed:**
+- Backend v0.13.1: the `use_s3`/`use_oidc` gates in `testing_service.py` and `spectree_config.py` no longer leave doubled blank lines when the flag is off.
+- Backend v0.13.2: `truncate_with_ellipsis` loses its unused `encoding` parameter (from EI), and the scaffold `vulture_whitelist.py` drops the matching `encoding` entry and no longer leaves doubled blank lines around its `use_database` blocks.
+- Frontend v0.20.1: `routed-tabs.tsx` carries a file-level `react-refresh/only-export-components` disable, like `auth-context.tsx`.
+
+**Migration steps:**
+1. `copier update --trust --defaults` in `backend/` and `frontend/`.
+2. Optional: remove `encoding  # unused variable` from the app's `vulture_whitelist.py` (app-owned).
+
 ## 2026-09-26 — Root v0.1.0, Backend v0.13.0, Frontend v0.20.0
 
 ### Monorepo: a root template, and per-repo CI leaves the component templates
