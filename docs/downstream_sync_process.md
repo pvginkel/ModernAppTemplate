@@ -20,11 +20,13 @@ Every modification to a template-owned file falls into one of three buckets:
 
 ### Phase 1: Discover
 
-Run the violation finder script from the template repo:
+Run the violation finder script from the template repo, once per component. Downstream apps are monorepos, so run it against the root layer (using the parent repo as the template) as well as the backend and frontend layers:
 
 ```bash
 cd /work/ModernAppTemplate
-poetry run python scripts/find_template_violations.py /path/to/downstream/app --template-repo backend
+poetry run python scripts/find_template_violations.py /path/to/downstream/app --template-repo .
+poetry run python scripts/find_template_violations.py /path/to/downstream/app/backend --template-repo backend
+poetry run python scripts/find_template_violations.py /path/to/downstream/app/frontend --template-repo frontend
 ```
 
 The script reads `copier.yml` and the app's `.copier-answers.yml` to automatically determine which files are template-owned, app-owned, and feature-flag-excluded. It detects drift using two methods:
@@ -63,6 +65,12 @@ For changes that belong in the template:
    git add -p && git commit -m "..."
    git tag vX.Y.Z
    ```
+   Root-template changes are committed and tagged in the parent repo itself, since `ModernAppTemplate` is the root template's own Git root:
+   ```bash
+   cd /work/ModernAppTemplate
+   git add -p && git commit -m "..."
+   git tag vX.Y.Z
+   ```
 7. **Commit the parent repo changelog** (`/work/ModernAppTemplate/changelog.md`).
 
 ### Phase 3: Add new hooks if needed
@@ -82,8 +90,17 @@ If a change can't be upstreamed (it's app-specific) and can't be refactored out 
 With the template updated (Phases 2-3 complete):
 
 1. **Read `changelog.md`** to understand all template changes and their migration steps. This is the primary guide for what needs to happen during the update.
-2. Run `copier update` in the downstream app.
-3. Resolve any merge conflicts. Template-owned files should now accept the template's version cleanly, since the good changes were upstreamed.
+2. Run `copier update` per component — root, backend, frontend — each against a clean working tree, committing between them since copier needs the whole monorepo's tree clean:
+   ```bash
+   # copier lives in the template repos' Poetry env, in the modern-app tool container
+   cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>
+   cd /work/<App> && git add -A && git commit -m "Update to root template vX.Y.Z"
+   cd /work/ModernAppTemplate/backend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/backend
+   cd /work/<App> && git add -A backend && git commit -m "Update to backend template vX.Y.Z"
+   cd /work/ModernAppTemplate/frontend && cexec modern-app poetry run copier update --trust --defaults /work/<App>/frontend
+   cd /work/<App> && git add -A frontend && git commit -m "Update to frontend template vX.Y.Z"
+   ```
+3. Resolve any merge conflicts. Template-owned files should now accept the template's version cleanly, since the good changes were upstreamed. For `_skip_if_exists` files, copier may still produce merge conflicts or `*.rej` files when a template later adds a file the app already has — keep the app's version and delete the `.rej` files.
 4. Follow the migration steps from `changelog.md` for each entry since the app's current `_commit`.
 5. Move any remaining app-specific code out of template-owned files:
    - Business logic → app services or `startup.py` hooks
@@ -122,6 +139,8 @@ the violation finder to check: `poetry run python scripts/find_template_violatio
 | Post-migration logic | `startup.py` | `post_migration_hook()` |
 | Test fixtures | `tests/conftest.py` | Import from `conftest_infrastructure`, add app fixtures |
 | Extra exceptions | `app/exceptions.py` | Extend `BusinessLogicException` |
+| Side effects after a request commits | service code | `after_commit()` from `app/utils/after_commit.py` |
+| Sidecars CI must wait for | `backend/scripts/wait-for-services.py` | called by the root suite runner |
 
 ### If you need something the template doesn't support
 Do NOT modify a template-owned file. Instead:
@@ -157,16 +176,16 @@ This is especially important because `copier update` only overwrites template-ow
 
 ---
 
-## Current Status (2026-03-15)
+## Current Status (2026-09-26)
 
 All apps were synced to the latest template versions:
 
-| App | Backend | Frontend | Notes |
-|-----|---------|----------|-------|
-| ElectronicsInventory | v0.12.0 | v0.17.0 | Clean |
-| IoTSupport | v0.12.0 | v0.17.0 | Pre-existing lint warnings (routed-tabs, device-logs) |
-| ZigbeeControl | v0.12.0 | v0.17.0 | Clean; `use_app_shell=false` |
-| DHCPApp | v0.12.0 | v0.17.0 | Clean |
+| App | Root | Backend | Frontend | Notes |
+|-----|------|---------|----------|-------|
+| ElectronicsInventory | v0.1.1 | v0.13.2 | v0.20.1 | Jenkinsfile keeps an extra docs-image stage; `upload_document.py` narrows `detected_type` to the app's `AttachmentType` (app-specific edit to a template-owned file) |
+| IoTSupport | v0.1.1 | v0.13.2 | v0.20.1 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
+| DHCPApp | v0.1.1 | v0.13.2 | v0.20.1 | Clean |
+| ZigbeeControl | v0.1.1 | v0.13.2 | v0.20.1 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
 
 DesignAssistant is no longer part of the sync: the project is archived.
 

@@ -8,6 +8,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-26 — Root v0.1.1
+
+### Suite runner timeouts sized for the largest suite
+
+**What changed:** `scripts/dev.py`'s usage no longer suggests `-e gateway` to skip a service (honcho's `-e` is `--env`); a subset is started with positional names, e.g. `./scripts/dev.py backend frontend`. `tools/suite_runner/local.py` allows ElectronicsInventory's timeouts: backend install 600s, backend pytest 1800s, pnpm install 600s, frontend build 900s, Playwright browser install 900s, Playwright 3600s (were 300/900/300/600/300/1800).
+
+**Migration steps:**
+1. `copier update --trust --defaults` at the app root.
+
 ## 2026-09-26 — Backend v0.13.1, v0.13.2, Frontend v0.20.1
 
 ### Patch releases found while updating the apps

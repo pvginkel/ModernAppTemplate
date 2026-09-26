@@ -4,25 +4,30 @@ This document captures everything learned from the first template extraction att
 
 ## Goal
 
-A Copier template that generates self-contained Flask backend projects (and eventually React frontend projects). Each generated project is plain Python/TypeScript with no runtime dependency on the template. Template updates via `copier update` with three-way merge.
+A Copier template that generates self-contained monorepo applications: a root template (workspace scaffolding, CI, dev orchestration) plus Flask backend and React frontend projects. Each generated project is plain Python/TypeScript with no runtime dependency on the template. Template updates via `copier update` with three-way merge.
 
 ## Repository Structure
 
-Backend and frontend templates live in separate Git repos, linked as submodules of the parent `ModernAppTemplate` repo. Each has its own `copier.yml` and is independently copyable. Copier needs a Git root to function properly (versioning, `_commit` tracking, `copier update`), which is why submodules are used instead of subdirectories.
+Backend and frontend templates live in separate Git repos, checked out inside the parent `ModernAppTemplate` repo. Each has its own `copier.yml` and is independently copyable. The root template's `copier.yml` lives at the parent repo's own root (`_subdirectory: root/template`). Copier needs a Git root to function properly (versioning, `_commit` tracking, `copier update`), which is why the backend and frontend templates are separate repos instead of subdirectories of the parent — and why the root template, needing no such isolation, can simply be the parent repo itself, versioned by the parent's own tags (first release: v0.1.0).
 
 ```
-ModernAppTemplate/                  # Parent repo (orchestration, docs, shared scripts)
+ModernAppTemplate/                  # Parent repo (orchestration, docs, shared scripts) — also the root template's repo
 ├── CLAUDE.md                       # Project-wide instructions
+├── copier.yml                      # Root template configuration (_subdirectory: root/template)
 ├── docs/
 │   ├── copier_approach.md          # This file
 │   ├── change_workflow.md          # Template change workflow
 │   ├── downstream_sync_process.md  # App sync process
 │   └── backend_porting_guide.md    # Backend porting guide
 ├── scripts/
-│   └── find_template_violations.py # Cross-template validation tool
+│   ├── find_template_violations.py # Cross-template validation tool
+│   ├── test_all.py, pull_all.py, push_all.py, review_all.py, changes_since_sync.py, workspace.py
 ├── changelog.md                    # Coordinated changelog
-├── validate.sh                     # Regenerate both test-apps, run all tests
-├── backend/                        # Git submodule → ModernAppBackendTemplate
+├── root/                           # Root template
+│   ├── template/                   # Copier template source
+│   ├── regen.sh                    # Root regeneration script (requires backend/frontend regens first)
+│   └── test-app/                   # Generated test application (gitignored, DO NOT edit)
+├── backend/                        # Separate repo checkout → ModernAppBackendTemplate (NOT a submodule)
 │   ├── copier.yml                  # Backend template configuration
 │   ├── template/                   # Copier template source
 │   ├── test-app/                   # Generated test application (DO NOT edit)
@@ -30,7 +35,7 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
 │   ├── tests/                      # Mother project tests (infrastructure)
 │   ├── regen.sh                    # Backend regeneration script
 │   └── pyproject.toml              # Dev dependencies (copier, pytest)
-└── frontend/                       # Git submodule → ModernAppFrontendTemplate
+└── frontend/                       # Separate repo checkout → ModernAppFrontendTemplate (NOT a submodule)
     ├── copier.yml                  # Frontend template configuration
     ├── template/                   # Copier template source
     ├── test-app/                   # Generated test application (DO NOT edit)
@@ -40,26 +45,49 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
     └── package.json                # Dev dependencies
 ```
 
-### Why submodules
+### Why separate repos
 
-- **Copier needs a Git root.** Copier resolves `_commit`, tags, and `copier update` from the Git root of the template source. Submodules give each template its own Git root.
+- **Copier needs a Git root.** Copier resolves `_commit`, tags, and `copier update` from the Git root of the template source. Separate repo checkouts give the backend and frontend templates their own Git root each; the root template gets this for free since it lives at the parent repo's own root.
 - **Independent versioning.** Backend and frontend can be tagged and versioned independently. `copier update` tracks each cleanly.
 - **Shared feature flags.** `use_oidc`, `use_sse`, etc. are full-stack features. The parent repo makes it obvious when they drift.
 - **Coordinated changelog.** The parent repo's `changelog.md` covers cross-template changes.
-- **Single validation.** `validate.sh` regenerates both test-apps and runs all test suites. One command, full confidence.
-- **Bidirectional maintenance.** Work directly in submodules, commit/tag there, then update the parent's pin.
+- **Single validation.** Regenerating all three test-apps and running all test suites gives full confidence in one pass.
+- **Bidirectional maintenance.** Work directly in `backend/`/`frontend/`, commit/tag there; root-template work is committed and tagged directly in the parent repo.
 
 ### Validation script
 
-`validate.sh` at the repo root:
-1. Regenerates both test-apps from their templates
-2. Copies domain files into both
-3. Installs deps for both
-4. Runs all test suites (backend mother + domain, frontend mother + domain)
-5. Runs flag combination validation for both
-6. Reports pass/fail summary
+`validate.sh` does not exist — it was planned but never added to this repo. Validation is done per template instead:
 
-If it passes, the change is safe to port to downstream apps.
+- **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `poetry run pytest ../tests/ -v && poetry run pytest tests/ -v` (plus ruff/mypy/vulture).
+- **Frontend**: `cexec modern-app bash regen.sh`, then in `test-app`: `pnpm run check && pnpm run build`.
+- **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app`: `poetry run ruff check scripts tools && poetry run run-suite --suite backend`.
+
+If all three pass, the change is safe to port to downstream apps.
+
+## Root Template
+
+The root template generates the monorepo layer that wraps the backend and frontend projects: workspace scaffolding, CI, and the local dev orchestration.
+
+Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `sse_gateway_port` (default `frontend_port` + 2), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
+
+Template-owned (updated by `copier update`):
+- `Jenkinsfile` — validation Job on the prebaked `registry:5000/modern-app-dev-playwright:playwright-<version>` image running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
+- `tools/suite_runner/` — the `run-suite` test orchestrator, same command locally and in CI
+- `Procfile.dev`
+- `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
+- `scripts/dev-sse-gateway.sh` — only with `use_sse`; runs the `ssegateway` npm package from `frontend/node_modules`
+- `.gitignore`
+- `.vscode/settings.json`
+
+Generated once (`_skip_if_exists`):
+- `pyproject.toml` — root Poetry project with honcho, psutil, pinned ruff and `[tool.ruff]`
+- `CLAUDE.md` — skeleton with a template-ownership table
+- `<repo_name>.code-workspace`
+- `scripts/regenerate-openapi.py`
+- `.kubecoder/config.yaml`
+- `.kubecoder/project.yaml`
+
+Hook: the suite runner runs `backend/scripts/wait-for-services.py` (under the backend's Poetry venv) after the backend install when that file exists — for CI sidecars that are slow to come up.
 
 ---
 
@@ -129,9 +157,8 @@ All infrastructure code. Developers should not edit these:
 - `app/utils/` — all utilities
 - `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
 - `run.py` — server entry point
-- `Dockerfile` — container build
-- `Jenkinsfile` — CI pipeline
-- `scripts/` — shell scripts
+- `scripts/` — `testing-server.sh`, `dev-server.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`
+- `Dockerfile` — container build (generated once, `_skip_if_exists`; CI now lives in the root template)
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
 
 ### App-maintained (`_skip_if_exists` — generated once, never overwritten)
@@ -162,15 +189,13 @@ All infrastructure code. Developers should not edit these:
 | `project_description` | str | "A Flask backend application" | Used in generated consts.py |
 | `author_name` | str | required | pyproject.toml author |
 | `author_email` | str | required | pyproject.toml author |
-| `repo_url` | str | required | Git repository URL for Jenkinsfile |
-| `image_name` | str | `registry:5000/{{ project_name }}` | Docker image name for Jenkinsfile |
 | `backend_port` | int | 5000 | Server port for Dockerfile EXPOSE and run.py default |
 | `use_database` | bool | true | SQLAlchemy + Alembic |
 | `use_oidc` | bool | false | OIDC authentication |
 | `use_s3` | bool | false | S3 storage |
 | `use_sse` | bool | false | Server-Sent Events |
 
-Note: `workspace_name` was removed — `repo_url` and `image_name` are the correct independent parameters.
+Note: `workspace_name`, `repo_url` and `image_name` were removed — CI and image naming now live in the root template (`deploy_repo`, `backend_image`, etc.).
 
 ### `_skip_if_exists` files
 
@@ -464,11 +489,12 @@ python -m pytest tests/ -v          # Domain tests
 **Build/deploy:**
 - `pyproject.toml.jinja` — dependencies (`_skip_if_exists`)
 - `run.py` — server entry (reads port from env, no Jinja needed if default in consts.py)
-- `Dockerfile.jinja` — container build (Jinja: feature deps, port)
-- `Jenkinsfile.jinja` — CI pipeline (Jinja: repo_url, image_name)
+- `Dockerfile.jinja` — container build (`_skip_if_exists`; Jinja: feature deps, port)
+- `.dockerignore` — build context exclusions (`_skip_if_exists`)
 - `.gitignore` — standard ignores
 - `.env.example.jinja` — env var documentation (`_skip_if_exists`)
 - `scripts/` — shell scripts (some need Jinja for project name)
+- `README.md` — scaffold (`_skip_if_exists`)
 
 **Tests:**
 - `tests/__init__.py` — empty
@@ -482,10 +508,12 @@ python -m pytest tests/ -v          # Domain tests
 - `app/services/diagnostics_service.py`
 - `app/utils/pool_diagnostics.py`
 - `app/utils/empty_string_normalization.py`
+- `app/utils/after_commit.py` — `after_commit(callback)` runs a callback only after the request's transaction commits — the extension point for post-commit side effects
 - `alembic.ini.jinja`
 - `alembic/env.py`
 - `alembic/script.py.mako`
 - `alembic/versions/.gitkeep`
+- `scripts/init-dev-database.py` — creates the dev database on the Postgres sidecar
 
 ### `use_oidc` files
 - `app/api/auth.py`
