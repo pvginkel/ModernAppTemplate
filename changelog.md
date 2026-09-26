@@ -8,6 +8,16 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-26 — Frontend v0.20.2
+
+### Auth redirect test goes back to `/items`
+
+**What changed:**
+- `tests/infrastructure/auth/auth.spec.ts`: "preserves full path including query params in redirect" navigates to `/items?filter=active&sort=name` again. v0.20.0 had switched it to `/` (from DHCPApp), but apps whose index route redirects (EI to `/parts`, IoTSupport to `/devices`) drop the query string before the 401, so the test failed in their CI. `/items` is not a route in the apps, so nothing redirects it.
+
+**Migration steps:**
+1. `copier update --trust --defaults` in `frontend/`.
+
 ## 2026-09-26 — Root v0.1.1
 
 ### Suite runner timeouts sized for the largest suite
