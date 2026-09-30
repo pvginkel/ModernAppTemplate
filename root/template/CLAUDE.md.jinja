@@ -12,8 +12,9 @@
 
 Everything builds through `kc project build|test|lint|setup`, run **from the repo root** — those
 verbs are cwd-bound. The toolchain lives in the `modern-app` sidecar, so ad-hoc `poetry`/`pnpm`
-commands need `cexec modern-app`. `scripts/dev.py` starts the dev stack. After a backend API change,
-`scripts/regenerate-openapi.py --frontend` refreshes the frontend's OpenAPI cache and client.
+commands need `cexec modern-app`. `scripts/dev.py` starts the dev stack and `scripts/dev.py stop`
+stops it from another shell. After a backend API change, `scripts/regenerate-openapi.py --frontend`
+refreshes the frontend's OpenAPI cache and client.
 
 ## Template ownership
 

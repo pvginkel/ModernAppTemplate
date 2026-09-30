@@ -8,6 +8,17 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-30 — Root v0.1.4
+
+### `scripts/dev.py` stops on a signal, and the validation Job's tar extraction is clean
+
+**What changed:**
+- `scripts/dev.py` forwards SIGINT and SIGTERM to honcho as a Ctrl-C through its PTY instead of ignoring them, so a signal from another shell stops every service. Before, the only way to stop a backgrounded stack was to kill the cexec client, and that left the backend and the SSE gateway running as orphans in the `modern-app` sidecar. New `scripts/dev.py stop` signals the running stack through `logs/dev.pid` and waits for it to exit. A stop that comes in before honcho has started every service is held until then, because honcho crashes on a SIGINT during startup.
+- `Jenkinsfile`: the validation Job extracts the context archive with `--strip-components=1`. That skips the archive's `./` entry, whose mode and mtime uid 1000 cannot set on the root-owned `/work` emptyDir. The old command printed "Cannot utime" / "Cannot change mode" and exited 2 on every run; the files were extracted anyway, so builds stayed green.
+
+**Migration steps:**
+1. `copier update --trust --defaults` at the app root. App additions to the validation Job spec go through the three-way merge; check them in the diff.
+
 ## 2026-09-30 — Root v0.1.3, Frontend v0.20.3
 
 ### S3 sidecar is `s3storage`, and Playwright is pinned to 1.60.0
