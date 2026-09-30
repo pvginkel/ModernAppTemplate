@@ -21,10 +21,10 @@ projects:
     setup:
       - cexec modern-app poetry install --no-interaction
 {% if use_database or use_s3 %}
-      - "test -f .env || printf '{% if use_database %}DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/{{ database_name }}\\n{% endif %}{% if use_s3 %}S3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=minioadmin\\nS3_SECRET_ACCESS_KEY=minioadmin\\nS3_BUCKET_NAME={{ project_name }}-dev\\n{% endif %}' > .env"
+      - "test -f .env || printf '{% if use_database %}DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/{{ database_name }}\\n{% endif %}{% if use_s3 %}S3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=s3storage\\nS3_SECRET_ACCESS_KEY=s3storage\\nS3_BUCKET_NAME={{ project_name }}-dev\\n{% endif %}' > .env"
 {% endif %}
 {% if use_s3 %}
-      - "test -f .env.test || printf 'FLASK_ENV=testing\\nS3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=minioadmin\\nS3_SECRET_ACCESS_KEY=minioadmin\\nS3_BUCKET_NAME={{ project_name }}-test\\n' > .env.test"
+      - "test -f .env.test || printf 'FLASK_ENV=testing\\nS3_ENDPOINT_URL=http://localhost:9000\\nS3_ACCESS_KEY_ID=s3storage\\nS3_SECRET_ACCESS_KEY=s3storage\\nS3_BUCKET_NAME={{ project_name }}-test\\n' > .env.test"
 {% endif %}
 {% if use_database %}
       - cexec modern-app poetry run python scripts/init-dev-database.py

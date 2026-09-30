@@ -15,9 +15,11 @@
 # per-worker SQLite file.
 {% endif %}
 {% if use_s3 %}
-# `minio` provides S3 on localhost:9000: the backend test fixtures hard-fail
-# when S3_ENDPOINT_URL is unreachable. CI runs its own S3 sidecar in the
-# validation Job (Jenkinsfile, "Run validation").
+# `s3storage` (RustFS) provides S3 on localhost:9000, credentials
+# s3storage/s3storage, storage cleared on every start: the backend test fixtures
+# hard-fail when S3_ENDPOINT_URL is unreachable, and create their bucket. CI
+# runs the same RustFS image as a sidecar in the validation Job (Jenkinsfile,
+# "Run validation").
 {% endif %}
 #
 # No imageBuilder: both Dockerfiles are built by Jenkins with
@@ -42,7 +44,7 @@ services:
   - postgres
 {% endif %}
 {% if use_s3 %}
-  - minio
+  - s3storage
 {% endif %}
 {% endif %}
 

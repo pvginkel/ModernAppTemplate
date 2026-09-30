@@ -8,6 +8,20 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-09-30 — Root v0.1.3, Frontend v0.20.3
+
+### S3 sidecar is `s3storage`, and Playwright is pinned to 1.60.0
+
+**What changed:**
+- Root v0.1.3: KubeCoder's catalog replaced the `minio` service with `s3storage`, a RustFS sidecar on the same `localhost:9000` with credentials `s3storage`/`s3storage`, and storage cleared on every start. An environment whose `config.yaml` names `minio` is refused on restart. The generated `.kubecoder/config.yaml` selects `s3storage`, and `.kubecoder/project.yaml` seeds `backend/.env` and `backend/.env.test` with the new credentials. CI's validation Job already ran RustFS with these credentials.
+- Frontend v0.20.3: `package.json` pins `@playwright/test` to `1.60.0` instead of `^1.60.0`. 1.63.0's browser download times out in KubeCoder pods and in CI, while 1.60.0 downloads fine. This is a hold until a Playwright release fixes it, not a floor.
+
+**Migration steps:** both files are generated once (`_skip_if_exists`), so `copier update` does not change them.
+1. `copier update --trust --defaults` at the app root and in `frontend/`.
+2. With `use_s3`: in `.kubecoder/config.yaml`, replace `- minio` under `services:` with `- s3storage`. In `.kubecoder/project.yaml`, replace `minioadmin` with `s3storage` in the `.env` and `.env.test` seeds. Also update any app-owned script that seeds the same credentials.
+3. With `use_s3`, in each existing environment: the seeds never overwrite a file, so fix the S3 credentials in `backend/.env` and `backend/.env.test`, or delete the files and run `kc project setup`. Then `kc env restart`.
+4. In `frontend/package.json`, change `"@playwright/test": "^1.60.0"` to `"1.60.0"`, and run `pnpm install` to update the lockfile's specifier.
+
 ## 2026-09-26 — Root v0.1.2
 
 ### Validation Job runs in the KubeCoder modern-app toolchain image
