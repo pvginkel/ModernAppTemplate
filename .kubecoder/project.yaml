@@ -62,11 +62,8 @@ projects:
     build: cexec modern-app bash root/regen.sh
     # The generated monorepo's suite runner, as CI's validation Job runs it.
     # Backend suite only. `--suite frontend` (the frontend template's
-    # Playwright specs) passes, but not reliably here yet:
-    #   - regen.sh resolves @playwright/test "^1.60.0" to 1.63.0, whose browser
-    #     download times out in this pod (it forces IPv6 first, and IPv6 is
-    #     blackholed). 1.60.0 downloads fine.
-    #   - With 1.60.0 it passed at a 5.3 GB cgroup peak against the sidecar's
-    #     5 GiB limit, and one run took the modern-app container down.
+    # Playwright specs) passes, but runs the modern-app sidecar up to its
+    # 5 GiB memory limit, and one run took the container down. Run it by hand:
+    #   cexec modern-app sh -c 'cd root/test-app && poetry run run-suite --suite frontend'
     test: cexec modern-app sh -c 'cd root/test-app && poetry run run-suite --suite backend'
     lint: cexec modern-app sh -c 'cd root/test-app && poetry run ruff check scripts tools'

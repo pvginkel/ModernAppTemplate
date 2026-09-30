@@ -176,16 +176,16 @@ This is especially important because `copier update` only overwrites template-ow
 
 ---
 
-## Current Status (2026-09-26)
+## Current Status (2026-09-30)
 
 All apps were synced to the latest template versions:
 
 | App | Root | Backend | Frontend | Notes |
 |-----|------|---------|----------|-------|
-| ElectronicsInventory | v0.1.1 | v0.13.2 | v0.20.1 | Jenkinsfile keeps an extra docs-image stage; `upload_document.py` narrows `detected_type` to the app's `AttachmentType` (app-specific edit to a template-owned file) |
-| IoTSupport | v0.1.1 | v0.13.2 | v0.20.1 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
-| DHCPApp | v0.1.1 | v0.13.2 | v0.20.1 | Clean |
-| ZigbeeControl | v0.1.1 | v0.13.2 | v0.20.1 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
+| ElectronicsInventory | v0.1.3 | v0.13.2 | v0.20.3 | Jenkinsfile keeps an extra docs-image stage; `upload_document.py` narrows `detected_type` to the app's `AttachmentType` (app-specific edit to a template-owned file) |
+| IoTSupport | v0.1.3 | v0.13.2 | v0.20.3 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
+| DHCPApp | v0.1.3 | v0.13.2 | v0.20.3 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
+| ZigbeeControl | v0.1.3 | v0.13.2 | v0.20.3 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
 
 DesignAssistant is no longer part of the sync: the project is archived.
 
