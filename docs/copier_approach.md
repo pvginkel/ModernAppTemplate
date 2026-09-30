@@ -171,6 +171,7 @@ All infrastructure code. Developers should not edit these:
 - `app/models/__init__.py` — model imports for Alembic
 - `pyproject.toml` — dependencies (app manages after initial generation)
 - `tests/conftest.py` — imports infrastructure fixtures, adds app fixtures
+- `tests/test_smoke.py` — one liveness test, so a fresh app's `pytest` has something to collect
 - `.env.example` — environment variable documentation
 
 ### Template-maintained test infrastructure
@@ -209,6 +210,7 @@ _skip_if_exists:
   - app/models/__init__.py
   - pyproject.toml
   - tests/conftest.py
+  - tests/test_smoke.py
   - .env.example
 ```
 
@@ -500,6 +502,7 @@ python -m pytest tests/ -v          # Domain tests
 - `tests/__init__.py` — empty
 - `tests/conftest_infrastructure.py.jinja` — infrastructure fixtures (template-owned)
 - `tests/conftest.py` — app fixture scaffold (`_skip_if_exists`)
+- `tests/test_smoke.py` — liveness smoke test (`_skip_if_exists`)
 
 ### `use_database` files
 - `app/extensions.py`

@@ -27,8 +27,12 @@ template-owned file to add app behaviour; use the extension points instead:
 |------|-----------|
 | New API endpoints | `backend/app/api/`, registered in `register_blueprints()` in `backend/app/startup.py` |
 | New services | `backend/app/services/`, wired in `backend/app/services/container.py` |
+{% if use_database %}
 | Side effects after a request's commit | `after_commit()` from `backend/app/utils/after_commit.py` |
 | CLI commands, post-migration logic | `backend/app/startup.py` |
+{% else %}
+| CLI commands | `backend/app/startup.py` |
+{% endif %}
 | Test fixtures | `backend/tests/conftest.py`, `frontend/tests/support/fixtures.ts` |
 | Sidecars CI must wait for | `backend/scripts/wait-for-services.py` (the suite runner calls it) |
 

@@ -8,7 +8,18 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
-## 2026-09-30 — Root v0.1.4
+## 2026-09-30 — Root v0.1.4, Backend v0.13.3, Frontend v0.20.4
+
+### A fresh instance passes its own gates
+
+**What changed:** a newly generated app (seen with `use_database=false`, `use_app_shell=false`) failed its gates until the app added code of its own.
+- Backend v0.13.3: new app-owned `tests/test_smoke.py` (`_skip_if_exists`), one test that the app answers `/health/healthz`. With no tests at all, `pytest` exits 5 and `poetry run check` fails.
+- Frontend v0.20.4: new app-owned `src/routes/index.tsx` (`_skip_if_exists`), a placeholder home page. With `__root` as the only route, the router's types collapse to `never` and `tsc` fails. With `use_oidc` and without `use_app_shell`, the page draws a header with the `UserDropdown`, which the template's auth specs look for.
+- Frontend v0.20.4: `scripts/fetch-openapi.js` creates `openapi-cache/` before it writes the spec, so the first `pnpm generate:api` in a fresh app no longer fails with ENOENT.
+- Root v0.1.4: the generated `CLAUDE.md` lists `after_commit()` and post-migration logic as extension points only with `use_database`.
+
+**Migration steps:**
+1. `copier update --trust --defaults` in `backend/` and `frontend/`. The update adds `backend/tests/test_smoke.py` to an app that has none; keep it or delete it. `src/routes/index.tsx` is skipped, since every app has one.
 
 ### `scripts/dev.py` stops on a signal, and the validation Job's tar extraction is clean
 
