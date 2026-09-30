@@ -40,6 +40,9 @@ for component in backend frontend; do
   tar -C "$REPO_ROOT/$component/test-app" --exclude=node_modules --exclude=.venv --exclude=test-results -cf - . \
     | tar -C "test-app/$component" -xf -
 done
+# The frontend template's .env.test points BACKEND_ROOT at ../../backend/test-app,
+# its own checkout's layout. In the monorepo the default, ../backend, is right.
+rm -f test-app/frontend/.env.test
 
 echo "==> Installing root dependencies..."
 cd test-app && poetry install -q

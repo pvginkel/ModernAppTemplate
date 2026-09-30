@@ -1,49 +1,72 @@
-# Curated entry points for ModernAppTemplate — the meta repo.
+# Curated entry points for ModernAppTemplate: the root template (this repo) and
+# the backend and frontend templates, checked out at backend/ and frontend/
+# (separate git repos, see .kubecoder/config.yaml).
 #
-# The two Copier templates are separate repositories, checked out at backend/
-# and frontend/ inside this tree (see .kubecoder/config.yaml). Neither carries a
-# .kubecoder/project.yaml of its own yet, so the `setup:` that makes a fresh
-# environment workable lives here: both template repos need their Poetry env
-# (which is what provides `copier`) before regen.sh will run. Give a template
-# repo its own project.yaml when its gates go green, and drop its component
-# from this file at the same time.
+# Each template is validated through a generated test-app: `build` regenerates
+# it from the template (regen.sh), `test` and `lint` run the gates against it.
+# So after a template edit, run `kc project build` before `test` or `lint`.
 #
-# No build/test/lint verbs, deliberately. Both templates are behind and their
-# gates are red for reasons that need code changes, not environment changes:
+# Component order is load-bearing: root/regen.sh copies the backend and
+# frontend test-apps into root/test-app, and the backend mother suite takes the
+# SSE gateway from frontend/test-app/node_modules. So root comes last.
 #
-#   backend/   `poetry run pytest ../tests/` -> 225 passed, 107 errors, and
-#              `poetry run pytest tests/`    -> 6 errors. One cause for all of
-#              them: the S3 access key committed in backend/.env.test is
-#              rejected by the Ceph radosgw at srvceph1:7480 with
-#              InvalidAccessKeyId. The endpoint itself is reachable from the
-#              modern-app sidecar; the key has been revoked.
-#
-#   frontend/  `pnpm run check` and `pnpm run build` -> 1 eslint error, in
-#              template-owned src/components/primitives/debounced-search-input.tsx:
-#              react-hooks/set-state-in-effect. The template pins
-#              eslint-plugin-react-hooks to "^7.0.1" and ships no lockfile, so
-#              regen.sh resolves 7.1.1, whose rule the template's own code
-#              trips.
-#
-# Wiring either in would make `kc project test` red out of the box and hide
-# real regressions behind known ones.
+# backend/test-app and frontend/test-app are tracked in their template repos,
+# and a regen churns their lockfiles and .copier-answers.yml. That churn is the
+# normal template workflow for `build`, but pod start should not dirty the
+# trees, so `setup` regenerates only a test-app that was never generated here,
+# keyed on a gitignored file regen.sh writes.
 projects:
-  root:
-    description: >-
-      Meta repo for the Copier Flask-backend and React-frontend templates:
-      the shared docs, the coordinated changelog, and the cross-repo scripts in
-      scripts/. The templates themselves are checked out at backend/ and
-      frontend/, each with its own git repo.
-
   backend:
     description: >-
       ModernAppBackendTemplate — the Copier template for Flask backends. Work
-      in template/, then `cexec modern-app bash regen.sh` to rebuild test-app.
-    setup: cexec modern-app poetry install --no-interaction
+      in template/, then `kc project build` to regenerate test-app.
+    setup:
+      - cexec modern-app poetry install --no-interaction
+      - test -f test-app/.env.test || cexec modern-app bash regen.sh
+      # .env.test is the harness's, not the template's; keep test-app's copy
+      # current without a regen.
+      - cp .env.test test-app/.env.test
+    build: cexec modern-app bash regen.sh
+    # Two runs: the mother suite (../tests) and the domain suite (tests/) share
+    # the module name tests.conftest, so they cannot run in one pytest process.
+    # The mother suite needs the s3storage sidecar (config.yaml).
+    test:
+      - cexec modern-app sh -c 'cd test-app && poetry run pytest ../tests/'
+      - cexec modern-app sh -c 'cd test-app && poetry run pytest tests/'
+    # test-app's own `poetry run check` minus its pytest step, which is `test:`.
+    lint:
+      - cexec modern-app sh -c 'cd test-app && poetry run ruff check .'
+      - cexec modern-app sh -c 'cd test-app && poetry run mypy .'
+      - cexec modern-app sh -c 'cd test-app && poetry run vulture app/ vulture_whitelist.py --min-confidence 80'
 
   frontend:
     description: >-
       ModernAppFrontendTemplate — the Copier template for React/Vite frontends.
-      Work in template/, then `cexec modern-app bash regen.sh` to rebuild
-      test-app.
-    setup: cexec modern-app poetry install --no-interaction
+      Work in template/, then `kc project build` to regenerate test-app.
+    setup:
+      - cexec modern-app poetry install --no-interaction
+      - test -f test-app/src/routeTree.gen.ts || cexec modern-app bash regen.sh
+    build:
+      - cexec modern-app bash regen.sh
+      - cexec modern-app sh -c 'cd test-app && pnpm run build'
+    # eslint, tsc and knip.
+    lint: cexec modern-app sh -c 'cd test-app && pnpm run check'
+
+  root:
+    description: >-
+      The root template (root/template, versioned by this repo's tags), plus
+      the shared docs, the coordinated changelog and the cross-repo scripts.
+      Its test-app, root/test-app, wraps copies of the backend and frontend
+      test-apps into a complete monorepo.
+    setup: test -d root/test-app || cexec modern-app bash root/regen.sh
+    build: cexec modern-app bash root/regen.sh
+    # The generated monorepo's suite runner, as CI's validation Job runs it.
+    # Backend suite only. `--suite frontend` (the frontend template's
+    # Playwright specs) passes, but not reliably here yet:
+    #   - regen.sh resolves @playwright/test "^1.60.0" to 1.63.0, whose browser
+    #     download times out in this pod (it forces IPv6 first, and IPv6 is
+    #     blackholed). 1.60.0 downloads fine.
+    #   - With 1.60.0 it passed at a 5.3 GB cgroup peak against the sidecar's
+    #     5 GiB limit, and one run took the modern-app container down.
+    test: cexec modern-app sh -c 'cd root/test-app && poetry run run-suite --suite backend'
+    lint: cexec modern-app sh -c 'cd root/test-app && poetry run ruff check scripts tools'

@@ -34,5 +34,16 @@ capabilities:
 tools:
   - use: modern-app
 
-setup:
-  - kc project setup
+# Both reached on localhost from the modern-app sidecar, where the suites run.
+#   s3storage — RustFS on localhost:9000, credentials s3storage/s3storage. The
+#               backend template's mother suite hard-fails in pytest_configure
+#               when S3 is unreachable (backend/.env.test points here), and so
+#               do the downstream apps' backend suites. Storage is cleared on
+#               every start; the suites create their buckets themselves.
+#   postgres  — the downstream apps' `kc project setup` creates their dev
+#               database and runs `cli upgrade-db` against localhost:5432, so
+#               pod start fails their setup without it. No suite uses it.
+# No opensearch: only IoTSupport's dev stack reads it, and no setup or suite.
+services:
+  - s3storage
+  - postgres
