@@ -26,6 +26,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 **Migration steps:**
 1. `copier update --trust --defaults` at the app root. An app whose `Jenkinsfile` runs its validation through the library's `modernApp.test` books no request of its own; the update changes nothing there.
 
+## 2026-09-30 — Frontend v0.20.5
+
+### `pnpm generate:api` falls back to the cached spec when the backend is down
+
+**What changed:** `scripts/fetch-openapi.js` read `timestamp`, `hash` and `spec` fields from a cache that holds only the spec itself. With a cached spec and an unreachable backend, `fetchAndCache()` returned `undefined`, and `pnpm generate:api` crashed while generating hooks. It now returns the cached spec. It also compares the fetched spec with the cached one, so an unchanged spec is no longer rewritten on every run. `pnpm build` (`--cache-only`) was not affected.
+
+**Migration steps:**
+1. `copier update --trust --defaults` in `frontend/`. The file is template-owned.
+
 ## 2026-09-30 — Root v0.1.4, Backend v0.13.3, Frontend v0.20.4
 
 ### A fresh instance passes its own gates
