@@ -8,6 +8,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-10-06 — Root v0.1.5
+
+### The validation Job books no requests
+
+**What changed:** `Jenkinsfile`'s validation container no longer requests `cpu: "1"` and `memory: 3584Mi`. On prd, Kyverno sets each pod's memory request at creation from a daily snapshot of measured usage (Ansible slice 053, argo-cd D65 as amended 2026-10-06), and Jenkins pod templates book no CPU request.
+
+**Migration steps:**
+1. `copier update --trust --defaults` at the app root. An app whose `Jenkinsfile` runs its validation through the library's `modernApp.test` books no request of its own; the update changes nothing there.
+
 ## 2026-09-30 — Root v0.1.4, Backend v0.13.3, Frontend v0.20.4
 
 ### A fresh instance passes its own gates

@@ -85,10 +85,6 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                 poetry run run-suite --output-mode full --junitxml-dir /work/results --retries 2
                                                 echo \$? > /work/results/exit-code
                                                 sleep infinity
-                                          resources:
-                                              requests:
-                                                  cpu: "1"
-                                                  memory: 3584Mi
 {% if use_s3 %}
                                           env:
                                               - name: S3_ENDPOINT_URL
