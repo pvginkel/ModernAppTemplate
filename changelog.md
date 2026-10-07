@@ -8,6 +8,15 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-10-07 — Root v0.1.6
+
+### The validation Job books a CPU request again
+
+**What changed:** `Jenkinsfile`'s validation container requests `cpu: "1"` again, as before v0.1.5. Without a CPU request a validation pod starves on a busy node, and timing-sensitive tests fail (argo-cd D65 as amended 2026-10-07). The memory request stays Kyverno's, set at pod creation.
+
+**Migration steps:**
+1. `copier update --trust --defaults` at the app root. An app whose `Jenkinsfile` runs its validation through the library's `modernApp.test` gets the same CPU request from the library; the update changes nothing there.
+
 ## 2026-10-06 — Root v0.1.5
 
 ### The validation Job books no requests
