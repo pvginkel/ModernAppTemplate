@@ -178,7 +178,7 @@ This is especially important because `copier update` only overwrites template-ow
 
 ## Current Status (2026-09-30)
 
-All apps were synced to the latest template versions:
+All apps except FieldnotesApp were synced to the latest template versions:
 
 | App | Root | Backend | Frontend | Notes |
 |-----|------|---------|----------|-------|
@@ -186,6 +186,7 @@ All apps were synced to the latest template versions:
 | IoTSupport | v0.1.3 | v0.13.2 | v0.20.3 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
 | DHCPApp | v0.1.3 | v0.13.2 | v0.20.3 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
 | ZigbeeControl | v0.1.3 | v0.13.2 | v0.20.3 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
+| FieldnotesApp | v0.1.2 | v0.13.2 | v0.20.2 | Not yet synced: added to the environment on 2026-10-17. Moved from Poetry to uv on its own; the operator wants every app on uv, so confirm with them at its first sync and move the template to uv then |
 
 DesignAssistant is no longer part of the sync: the project is archived.
 
