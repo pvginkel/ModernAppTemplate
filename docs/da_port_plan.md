@@ -54,7 +54,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 
 | # | Phase | Status | Commits |
 |---|---|---|---|
-| 0 | Dedup and facts | todo | |
+| 0 | Dedup and facts | done 2026-10-17 | parent `7cb4426` |
 | 1 | uv everywhere, dependency bumps | todo | |
 | 2 | Backend: PostgreSQL testing | todo | |
 | 3 | Backend: fixes, stages, internals fact | todo | |
@@ -76,6 +76,19 @@ Record the stop in the phase log, and leave the phase `blocked`.
 ## Phase log
 
 *(Phases append here: date, phase, then the facts, deviations and commands later phases need.)*
+
+### 2026-10-17, phase 0: dedup and facts
+
+- **Output:** [`da_port_worklist.md`](da_port_worklist.md). Every later phase reads its "Plan corrections" (16 items) as well as its own §1 rows. The corrections change these phases' steps: 2, 3, 5, 6, 7, 8, 12, 15, 16 and 17.
+- **Deviation:** phase 8 step 4 takes the estate's `Jenkinsfile.architecture` on `architectureProducer`, not DA's files, and ships no `scripts/arch-validate.py` (correction 1, operator question 3). Phases 11–16 drop their architecture-YAML step, because all six apps are already producers.
+- **Gap filled:** phase 2 ships `backend/scripts/wait-for-services.py` (correction 3).
+- **For phase 1:**
+  - The proposed copier command for syncing an app is `cexec modern-app uv run --project /work/ModernAppTemplate/backend copier update --trust --defaults`, run from the component's directory. Confirm it on a real update and record the result here.
+  - Pin `copier==9.11.3` before the bumps.
+  - The CI toolchain image already has uv.
+  - §3 lists every Poetry use.
+- **Open for the operator:** D2 lockouts in IoTSupport, DHCPApp and ZigbeeControl; `HOMELAB_INTERNAL` on the public hosts; D8's means; PilotApp slice 002; MAT-12. None blocks phases 1–10.
+- **Read-only clones in `/work/scratch/`,** untouched: `JenkinsPipelineUtils`, `DockerImages`, `HomelabAppsDeploy`, `DevGuides`, `KubeCoderConfig`, `Architecture`, and the six deploy repos under `deploy/`. Phases 8, 9 and 11–16 can commit in them. Pull each one first.
 
 ## Phases
 
