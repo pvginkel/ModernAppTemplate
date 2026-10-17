@@ -49,8 +49,8 @@ This repository runs in a KubeCoder environment.
 | IoTSupport | `/work/IoTSupport/backend` | `/work/IoTSupport/frontend` | Closest to template patterns |
 | DHCPApp | `/work/DHCPApp/backend` | `/work/DHCPApp/frontend` | Synced |
 | ZigbeeControl | `/work/ZigbeeControl/backend` | `/work/ZigbeeControl/frontend` | Synced; `use_app_shell=false` |
-| FieldnotesApp | `/work/FieldnotesApp/backend` | `/work/FieldnotesApp/frontend` | Not yet synced; on uv, not Poetry; `use_app_shell=false` |
-| PilotApp | `/work/PilotApp/backend` | `/work/PilotApp/frontend` | Not yet synced; on uv, not Poetry; `use_app_shell=false` |
+| FieldnotesApp | `/work/FieldnotesApp/backend` | `/work/FieldnotesApp/frontend` | Synced; `use_app_shell=false`; a uv workspace |
+| PilotApp | `/work/PilotApp/backend` | `/work/PilotApp/frontend` | Synced; `use_app_shell=false` |
 
 ## Feature Flags (Shared Across Templates)
 

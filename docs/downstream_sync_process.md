@@ -176,18 +176,18 @@ This is especially important because `copier update` only overwrites template-ow
 
 ---
 
-## Current Status (2026-09-30)
+## Current Status (2026-10-17)
 
-All apps except FieldnotesApp and PilotApp were synced to the latest template versions:
+All six apps are synced to root v0.2.0, backend v0.14.0 and frontend v0.21.0, all on uv:
 
 | App | Root | Backend | Frontend | Notes |
 |-----|------|---------|----------|-------|
-| ElectronicsInventory | v0.1.3 | v0.13.2 | v0.20.3 | Jenkinsfile keeps an extra docs-image stage; `upload_document.py` narrows `detected_type` to the app's `AttachmentType` (app-specific edit to a template-owned file) |
-| IoTSupport | v0.1.3 | v0.13.2 | v0.20.3 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
-| DHCPApp | v0.1.3 | v0.13.2 | v0.20.3 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
-| ZigbeeControl | v0.1.3 | v0.13.2 | v0.20.3 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
-| FieldnotesApp | v0.1.2 | v0.13.2 | v0.20.2 | Not yet synced: added to the environment on 2026-10-17. Moved from Poetry to uv on its own; the operator wants every app on uv, so confirm with them at its first sync and move the template to uv then |
-| PilotApp | v0.1.6 | v0.13.3 | v0.20.4 | Not yet synced: added to the environment on 2026-10-17, generated after the 2026-09-30 sync and one frontend release behind. On uv, not Poetry, like FieldnotesApp; the same uv decision applies at its first sync |
+| ElectronicsInventory | v0.2.0 | v0.14.0 | v0.21.0 | Jenkinsfile keeps an extra docs-image stage; `frontend/eslint.config.js` carries the app's role-gating lint rules after the template's blocks (standing edit: the template has no hook for app lint rules) |
+| IoTSupport | v0.2.0 | v0.14.0 | v0.21.0 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
+| DHCPApp | v0.2.0 | v0.14.0 | v0.21.0 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
+| ZigbeeControl | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
+| FieldnotesApp | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; a uv workspace (`packages/`, `mcp-server/`, `eval/`), so the backend `Dockerfile` keeps its extra `COPY` lines, the runtime `git ca-certificates` install and `--no-editable`; `backend/.gitignore` ignores `.run/` (standing edit) |
+| PilotApp | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; no standing edits to template-owned files |
 
 DesignAssistant is no longer part of the sync: the project is archived.
 
