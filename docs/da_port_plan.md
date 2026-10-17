@@ -57,7 +57,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 0 | Dedup and facts | done 2026-10-17 | parent `7cb4426` |
 | 1 | uv everywhere, dependency bumps | done 2026-10-17 | backend `5cbec2a`, `7353261`; frontend `f3dfb72`; parent `7b06a55`, `23459f1` |
 | 2 | Backend: PostgreSQL testing | done 2026-10-17 | backend `6a2d04e`, `a29fd98`, `c9fba33`; parent `241d216` |
-| 3 | Backend: fixes, stages, internals fact | todo | |
+| 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
 | 4 | Backend: auth | todo | |
 | 5 | Backend: readiness, SSE, small takes | todo | |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | todo | |
@@ -141,6 +141,56 @@ Record the stop in the phase log, and leave the phase `blocked`.
   - Sequences are not rolled back, so literal IDs in asserts fail (EI's `box_no` asserts, worklist §5).
   - Every database app now runs the drift test; models and revisions must match (EI's `with_variant(..., "sqlite")` columns).
   - Nothing to set in `.env.test`: the default `TEST_DATABASE_ADMIN_URL` is the sidecar. CI needs the `postgres` service (phase 8).
+
+### 2026-10-17, phase 3: backend fixes, stages, the internals fact
+
+- **Deviations:**
+  - **BE-C10 skipped (reverted, `625c644`).** The root `.gitignore` already ignores `.env*` under `backend/`, so the change did nothing in a monorepo. In this repo, `template/.gitignore`'s `.env*` also matched `template/.env.example.jinja`. A dirty regen re-adds the template with `git add -A`, so it silently dropped the file. Keep patterns in `template/.gitignore` from matching template source names.
+  - **BE-C03:** the template's `after_commit()` stays the only mechanism; DA's `session_hooks.py` was not taken. `app.database.scoped_session` runs the callbacks after its own commit and always clears them, and `BaseSessionTask` runs on it.
+  - **BE-C04:** `scoped_session` and `scoped_savepoint` live in template-owned `app/database.py`, not in `container.py` (app-owned), because template code calls them.
+  - **BE-C05:** a request that matched no route is labelled `endpoint="unknown"`. `DiagnosticsService` used `request.path`, which let scans grow the label set. The histogram keeps its name, labels and buckets. `DiagnosticsService.request_duration_seconds` is gone (no app references it).
+  - **BE-C16 brought a fix:** the `Exception` catch-all turned every Werkzeug HTTP error without its own handler (413, 415 and so on) into a 500. A new `HTTPException` handler returns their own status.
+  - **Two fixes outside the items:** `alembic/env.py` calls `fileConfig(..., disable_existing_loggers=False)`, because every in-process migration (pytest's included) silenced the app's existing loggers. `drop_all_tables()` no longer empties `db.metadata` (phase 2's note).
+  - **S6's open question, settled:** `HOMELAB_INTERNAL` is a deploy setting (env var, default false), not a copier answer.
+- **What phase 3 added** (backend template):
+  - `Stage` (`is_local()`, `is_env()`, `.value`), `STAGES`, `default_stage()` and `Settings.stage` in `config.py`. Unset, `STAGE` is `local-tst` under testing, `local-dev` under development, and `prd` for any other `FLASK_ENV` (correction 8). `Settings(...)` built directly gets the same default from its `flask_env`.
+  - `Settings.homelab_internal`, and `Settings.expose_internals` (true when `STAGE` is not `prd`, or when `HOMELAB_INTERNAL` is set).
+  - The 500 catch-all shows `str(error)` only when `expose_internals` is true; otherwise "An unexpected error occurred". The correlation ID and the log keep the detail.
+  - `GET /api/ui-setup` returns `{"stage": ..., "expose_internals": ...}` in snake_case (`app/api/ui_setup.py`, `app/schemas/ui_setup_schema.py`). It sits under `api_bp`, so the OIDC hooks apply: it needs a signed-in user, at the read tier.
+  - Readyz carries `"stage"`. `HealthResponse.stage` is optional, because healthz has none.
+  - `FrontendVersionService._on_connect_callback` sends no fetched version in a local stage; a queued (pending) one still goes. The template sends on connect, where DA broadcast at startup.
+  - The `prd` guards: `upgrade-db --recreate` and `load-test-data` refuse with exit 1, and `reject_if_not_testing()` refuses on `STAGE=prd` even under `FLASK_ENV=testing`. A plain `upgrade-db`, which every deploy repo's init container runs, is unaffected.
+  - The settings dump: `Sensitive` marks (`secret_key`, `drain_auth_key`, `database_url`, `oidc_client_secret`, `s3_access_key_id`, `s3_secret_access_key`, `sse_callback_secret`), `dump_config_for_logging()` and `Settings.dump_for_logging()`; the latter shows the database URL with only its password masked. `run.py` logs every setting at boot. It dumps `AppSettings` only when the app's class has `dump_for_logging()`.
+  - Logging: `LOG_LEVEL` sets the root level (unknown names mean INFO), and `app/utils/log_formatter.py` holds `ExtraFieldFormatter` and `resolve_log_level()`.
+  - `MAX_UPLOAD_SIZE_MB` (default 50) becomes `MAX_CONTENT_LENGTH`. `allow_empty` column info opts a column out of empty-string normalization.
+  - `LifecycleCoordinatorProtocol.unregister_lifecycle_notification` is a new abstract method. The log stream's `connection_close` event is gone.
+  - MAT-13: the CLI's "Using database" line masks the password.
+  - Mother suite: 357 → 459 tests. BE-T04 is in `tests/test_task_service_internals.py`; BE-T05 and BE-T14 are appended to the existing files; BE-T15's pool part was phase 2's.
+- **Settings and edits the apps need (phases 11–16), all by hand:**
+  - **Deploy repos:** `STAGE=prd` (unset already means `prd`, but state it), and `HOMELAB_INTERNAL=true` where operator question 2 says.
+  - **App-owned `.env.example`:** add `STAGE` (commented), `HOMELAB_INTERNAL`, `LOG_LEVEL` and `MAX_UPLOAD_SIZE_MB`. The dev `.env` needs no `STAGE`, because `FLASK_ENV=development` gives `local-dev`.
+  - **Upload limit:** EI's `MAX_FILE_SIZE` is 100 MB, but nginx already caps bodies at 50 MB. EI sets `MAX_UPLOAD_SIZE_MB` only if it raises both.
+  - **App-owned `app_config.py`:** to get the `AppSettings` dump, add `dump_for_logging()` (`return dump_config_for_logging(self)`) and mark secrets `Annotated[str, Sensitive]`. EI's `OPENAI_API_KEY` and `MOUSER_SEARCH_API_KEY` are examples. Without the method there is no dump, so no secret leaks.
+  - **EI and IoTSupport's own `tests/testing_utils.py`:** `StubLifecycleCoordinator` needs `unregister_lifecycle_notification`.
+  - **EI `services/metrics/dashboard_metrics.py:124` and IoTSupport `services/coredump_service.py:443`:** they reset without closing; move them to `app.database.scoped_session`.
+  - **FieldnotesApp:** it reads its own `FIELDNOTES_LOG_LEVEL`/`LOG_LEVEL` (`app/fieldnotes/config.py:319`), and `run.py` now applies `LOG_LEVEL` to the root logger. Phase 15 reconciles the two.
+  - **App tests:**
+    - On `local-tst` the 500 body still carries the exception text, so tests asserting on it pass.
+    - A test that builds `Settings(flask_env="production")` now gets `stage == "prd"` and no exception text.
+    - Tests that read a version event on connect without queueing one first get nothing in a local stage.
+- **For phase 4:** the 403 from D2 will also hit `/api/ui-setup` for a role-less user, and phase 7 must treat it as "no badge, no diagnostics".
+- **For phase 5:**
+  - `_check_db_readiness` (`app/__init__.py.jinja`) now catches a failing `get_pending_migrations()` and reports `{"connected": true, "error": ..., "ok": false}`. D5's database check takes that over.
+  - Keep `stage` in the reworked readyz, and keep the local-stage skip in BE-T12's version-service rewrite.
+  - The two broadcast tests that correction 6 inverts are still in `tests/test_task_service.py`.
+  - BE-T14's S3 health-check tests come with D5's S3 check.
+- **For phase 7:** FE19 and FE32 read `GET /api/ui-setup` (`stage`, `expose_internals`) once the user is signed in.
+- **For phase 8:** the dev stack needs no `STAGE`; seed `HOMELAB_INTERNAL` only if wanted. CI sets `STAGE=tst`, whose `expose_internals` is true.
+- **For phase 10:** the changelog's migration steps are the list above, plus the readyz `stage` field, the `endpoint="unknown"` label, and 413 instead of 500 for oversized bodies.
+- **Gates:** `kc project build`, `test` (mother 518, domain 9, root backend suite) and `lint` are green. Playwright at one worker passed twice (35 tests, a few skip outside preview mode).
+  - `worker-isolation.spec.ts` alone at two workers failed once: worker 0's Vite process exited with code 1 before it was ready, and its backend was fine. It passed on the re-run at a 5,297 MB peak, against the container's 5 GiB limit.
+  - The runner writes `test_results.md` details only for a failed step, so a green run shows no counts. `pnpm exec playwright test --list` gives the inventory.
+- **Test gotcha:** don't assert on `spectree_config.api.spec` in the mother suite. Each `create_app()` makes a new SpecTree, and a spec lists only the routes its own instance decorated, which happened at the first app's import. So a later app's spec misses template routes.
 
 ## Phases
 
