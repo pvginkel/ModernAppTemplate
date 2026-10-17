@@ -3,20 +3,21 @@
 How the backend's endpoints address a resource, run work that takes a while, page a list and
 document their errors.
 
-### API-1 — A path identifies a resource by its UUID { #api-1 }
+### API-1 — A path identifies a resource by its surrogate key { #api-1 }
 
-A path parameter that names a resource MUST be the resource's UUID, as in
+An app picks one surrogate key type when it is created, an integer or a UUID, and its tables key
+on it. A path parameter that names a resource MUST be that key, as in
 `/api/projects/<project_id>`. A path MUST NOT carry a natural key: a name, a slug, an email, or a
 code the user chose.
 
-A resource whose table already keys on an integer keeps its integer paths. Changing a primary key
-is a migration of its own, never a side effect of other work.
+An app does not switch key types later. Changing a primary key is a migration of its own, never a
+side effect of other work.
 
 **Why.** A natural value changes, or collides with another, and every link, bookmark and log line
-that holds it then names the wrong resource or none. A UUID names one resource across every table
-and every environment, so an id in a URL, a log line or an event payload is never ambiguous. It
-also gives away neither how many rows a table holds nor the ids next to it. The template's task ids
-are UUIDs.
+that holds it then names the wrong resource or none. A surrogate key never changes. One key type
+per app keeps every route, schema and client the same shape. A UUID also names one resource across
+every table and environment, and gives away neither how many rows a table holds nor the ids next
+to it, which is what an app weighs when it picks one. The template's task ids are UUIDs.
 
 ### API-2 — Work that can take over 2 seconds runs as a task { #api-2 }
 
