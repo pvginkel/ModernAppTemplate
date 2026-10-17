@@ -48,6 +48,7 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
 6. **Dependency pins**, in app-owned `backend/pyproject.toml`:
    - `spectree>=2.0.0,<3`, `flask-cors>=6.0.0,<7`, `pillow>=12.0.0,<13` (S3 apps);
    - in the dev group: `ruff>=0.15.0,<0.16`, `pytest>=9.0.0,<10`, `pytest-cov>=7.0.0,<8`, `types-flask-cors>=6.0.0,<7`, and the new `watchdog[watchmedo]>=6.0.0,<7`; drop `types-pillow`;
+   - mypy 1.20 or later: the template's stage code fails type-checking on 1.19 (`app/config.py`). The `mypy>=1.8.0,<2` range allows it, but `uv lock` keeps an older locked version, so run `uv lock --upgrade-package mypy`;
    - under `[tool.ruff]`, `exclude = ["vulture_whitelist.py"]` becomes `extend-exclude`.
 
    Pin `ruff==0.15.22` in the root `pyproject.toml`. Run `uv lock`, then `uv run ruff check --fix`: ruff 0.15 re-sorts some imports. App code that reassigns `img = img.convert(...)` needs the Pillow typing fix the template's own code got.
