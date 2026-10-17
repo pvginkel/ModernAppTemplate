@@ -69,7 +69,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 12 | App: ElectronicsInventory | done 2026-10-17 | ElectronicsInventory `f28c42a9` (root), `ab85dee9` (backend), `58ad6a13` (frontend), `966ab2a2` (uv), `f599895f`, `ea134e62`, `f99dd9e8`, `44995302`, `e3f56128`, `24facf44`, `c013e345`, `51cd44e6`, `06ecd407`, `013a6643`, `087d77e9`, `aa6c3c8b`, `f4c744a4`, `e5eb245c`, `76a87c48`, `4c7bbd12`, `f08330db`, `0d96e602`, `98d16280`, `e2ab4788`, `49f322ee`, `2273b788`, `f3fb505b`, `0401148c`, `0f306626`, `479e2926`, `d75a14b1`, `f695d15a`, `0badde29`, `4313093a`, `66da139d`, `3e4eef28`, `c506116e`, `52dc77d8`; ElectronicsInventoryDeploy clone `6f7bae7` (not pushed); parent `4bd9b3c`, `d89b609`, `072777c`, `7ecacf8`, `b8aa97c`, `4b13899`, this entry; none pushed |
 | 13 | App: DHCPApp | done 2026-10-17 | DHCPApp `752e0a8` (root), `c57c73c` (backend), `446f9cd` (frontend), `d04ceb9` (uv), `ab9ebbf`, `3fa7ec1`, `3331d7a`, `ff80b81`, `41be6b9`, `214687b`, `78bb6e3`; DnsmasqDeploy clone `ed61025` (not pushed); parent `c3bec09`, `e9ea80d`, `6d91d3c`, `abf711b`, this entry; none pushed |
 | 14 | App: ZigbeeControl | done 2026-10-17 | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv), `43baff0`, `9edbf7a`, `4f6295b`, `12dcfc0`, `6fea457`, `62289c5`, `b937119`, `fda3f8a`, `670761e`; Zigbee2mqttDeploy clone `a9fc082` (not pushed); parent `5451d57`, `37521f3`, `465d3eb`, `f8a9e5b`, this entry; none pushed |
-| 15 | App: FieldnotesApp | in progress: steps 1–5 done | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`); parent: this entry; none pushed |
+| 15 | App: FieldnotesApp | in progress: steps 1–9, 11–13 done | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`), `727420c` (step 9, readyz), `0a94aa0` (6), `9b58615` (8), `1c048d9` (9), `c38e92a` (11), `5d8aefd` (12), `ea59e3e` (13); parent `8449fc1`, `0d49fd4`, this entry; none pushed |
 | 16 | App: PilotApp | todo | |
 | 17 | The push | todo | |
 
@@ -1008,6 +1008,51 @@ Changelog steps 1–5 in `/work/FieldnotesApp`, one commit per step plus one for
 
 - **NFR-4's unguessable connection id:** FN-38's CSPRNG token went with the drop; the template's `random.ts` and the worker's inline token use `Math.random()`. If the requirement stands, the fix belongs in the template (`crypto.getRandomValues` in both), not as a FieldnotesApp standing edit.
 - Step 14's precondition, as for the other apps.
+
+### 2026-10-17, phase 15, steps 6–9, 11–13: app-owned edits
+
+Changelog steps 6–9 and 11–13 in `/work/FieldnotesApp`, one commit per step. Nothing is pushed. No template change was needed, and no app bug turned up.
+
+- **9, readyz first (`727420c`):** `fieldnotes_service.py` registers `register_check("store", self._readyz, critical=True)`. `_readyz` returns `DISABLED` with no runtime, `OK` when `runtime.ready`, and otherwise `ERROR` with a `detail` that tells a failed start ("startup failed: the store could not be cloned or indexed") from one still running ("starting: cloning and indexing the store"). The app starts again (`create_app()` builds).
+- **6 (`0a94aa0`):** by hand in `backend/pyproject.toml`, keeping the workspace, its sources and the app's dependencies: spectree 1.5.8 → 2.0.3, flask-cors 4.0.2 → 6.0.5, ruff 0.11.13 → 0.15.22 (the root pins `ruff==0.15.22`), pytest 8.4.2 → 9.1.1, pytest-cov 4.1.0 → 7.1.0, types-flask-cors 4 → 6, `watchdog[watchmedo]` 6.0.0 added, `extend-exclude`. mypy was already 1.20.2. pytest-asyncio 1.4.0 works under pytest 9: the MCP server's suite, async tests included, passes 58 of 58. `ruff check --fix` changed nothing, and there was no UP042: the app has no `str, Enum`. **Ruff 0.15's formatter:** it would reformat four template-owned files, `app/api/testing_guard.py`, `app/services/health_service.py`, `app/utils/http_metrics.py` and `app/utils/log_formatter.py`, so they joined `[tool.ruff.format] exclude` (FN-21). Every file already on that list still needs it, and the other new template files format clean. Six app files took the formatter's new parentheses around multi-line lambdas: `inbox.py`, `fieldnotes_service.py`, and four `tests/fieldnotes/` files, among them the previous chunk's `test_inbox.py` line.
+- **7:** arrived in step 3, checked: `health_service=health_service` on `SSEConnectionManager`. The app's `testing_service` stays where it was, and `write_role="editor"` stays.
+- **8 (`9b58615`), taken:** `dump_for_logging()` and the template's docstring. `AppSettings` has no fields, so the dump is empty. The docstring adds that the app's settings and secrets live in `app/fieldnotes/config.py`, which `run.py` doesn't log.
+- **9, the rest (`1c048d9`):**
+  - **Log level: the template's `LOG_LEVEL` is the API's only level.** `run.py` applies it to the root logger, and `create_app` does too in testing mode. `FIELDNOTES_LOG_LEVEL` stays read but unused by the API, as `docs/rest-api.md` already said of it and of `FIELDNOTES_API_HOST`/`_PORT` since the port. The MCP server keeps its own `FIELDNOTES_LOG_LEVEL`, which it does apply (`docs/mcp-server.md`). This is the smallest change: no code moves, and no deploy is affected, since `FieldnotesDeploy` sets neither variable. Only the docs change: the settings docstring's table (`app/fieldnotes/config.py`) merges the host, port and log-level rows into "read but unused: the template's `HOST`, `PORT` and `LOG_LEVEL` apply", and `rest-api.md`'s row now names `LOG_LEVEL`.
+  - **The actioner's system task: no subject, and "nobody" is accepted.** Nothing in the UI consumes its events. The app bar's Actioner pill (`app-pills.tsx`, which opens `actioner-failure-dialog.tsx`) and the actioner page poll `GET /api/triage/actioner`, every 5 s while busy and every 20 s while idle, and the submit invalidates that query. `useSSETask` has one user, `use-inbox.ts`, which follows the inbox turn's task, and the actioner's task id never reaches a client. So no target was added. A comment at `actioner.py`'s `start_task` says why.
+  - `tests/fieldnotes/test_inbox.py`'s `send_event` fake takes `(target, event_data, event_name, service_type)`. 60 of 60 pass.
+  - No `.kubecoder` comment mentions readyz. Two app docs did. `docs/rest-api.md`'s health row (`{ok, failed}`) now describes the critical `store` check. `docs/slice-test-plan.md`'s live-instance wait grepped for `"store":{"failed":false,"ok":true}`, so it would have waited forever; it now waits on `curl -sf`, and its note says that readyz answers 200 once the store is ready, because the SSE gateway's check is no longer critical (the body reads `degraded`).
+- **11 (`c38e92a`):** `backend/.env.example` gains `STAGE` (commented out), `HOMELAB_INTERNAL`, `LOG_LEVEL` and `MAX_UPLOAD_SIZE_MB` in the template's words and places, and BASEURL's comment takes the template's rewording. `LOG_LEVEL`'s comment adds that the API ignores `FIELDNOTES_LOG_LEVEL`, which is the MCP server's. nginx caps bodies at 50 MB, the template's default. No app doc says the login or logout `redirect` is checked against `BASEURL`.
+- **12 (`5d8aefd`):** `pnpm update eslint-plugin-react-hooks ssegateway`. The lock already held react-hooks 7.1.1, so only the specifier moved (`^7.0.1` → `^7.1.1`, as ZigbeeControl's did). SSEGateway moved `bacf8c3` → `3f6199d`. pnpm also re-sorted `devDependencies`, and that was undone, because FieldnotesApp's `package.json` was in the render's order and equal to it, and a sorted file would conflict at the next update. eslint flags nothing.
+- **13 (`ea59e3e`):** `whitespace-nowrap` by hand; `button.ts` now equals `test-app-no-shell`'s render. Only the template's auth gate and empty state use it.
+
+**Gates.**
+
+- `uv lock --check` and `uv sync --locked` are green at the root and in `backend/`.
+- `import app, run` and `create_app()` work.
+- `kc project lint`: root and backend are green (ruff, `ruff format --check`, mypy over 128 files, vulture). FieldnotesApp's lint has no `arch-validate` step.
+- Frontend `pnpm check`: eslint and knip are green, `tsc` is not. In a tree without the gitignored generated files, `tsc` fails on about 60 missing-module and route-type errors; `pnpm build` makes them, and `kc project lint` doesn't. After `pnpm generate:api:build && pnpm generate:routes` it reports two errors, both step 15's:
+  - `src/hooks/use-ui-setup.ts:7`: no `useGetUiSetup` until the cache is refreshed.
+  - `src/components/triage/triage-page.tsx:183`: `guessed={triage.guessed}` is `boolean | undefined`. This is the generator's `--default-non-nullable false`: a response field with a default is now optional.
+- Backend suite (`uv run pytest`): 584 passed, 4 failed in 59 s, the same four as the previous chunk saw with its stub. They are `tests/fieldnotes/test_api.py`'s three readyz tests (`test_health_answers_without_a_token`, `test_a_failed_start_keeps_the_store_unready`, `test_a_start_that_cannot_index_the_checkout_fails`; step 10) and `tests/test_openapi_cache.py` (step 15).
+
+**For the next chunks.**
+
+- **10:**
+  - `test_api.py:37-40,48-51,73-75`: `json()["store"]` becomes `json()["checks"]["store"]`, which is `{"status": "ok", "critical": true}`, or `{"status": "error", "critical": true, "detail": "startup failed: the store could not be cloned or indexed"}` for the two failed starts.
+  - The first test's comment ("readiness also waits on the SSE gateway") no longer holds: the gateway's check isn't critical.
+  - Check whether any test reads a passing store and then a failing one (`health_service.clear_cache()`).
+- **15:** the refresh, then `triage-page.tsx:183`'s `guessed`: handle the missing value where `use-triage.ts` reads it.
+- **16:** run `pnpm build` (or the two generate scripts) before `kc project lint`, or `tsc`'s errors are noise. Upkeep: no `str, Enum`; `vulture_whitelist.py` equals the render.
+- **Close:** the parent `CLAUDE.md` and `docs/downstream_sync_process.md` rows, as the previous chunk said.
+
+**Changelog checklist gaps** (not edited):
+
+- **Step 6:** an app that runs `ruff format --check` (FieldnotesApp's FN-21 exclude list) must add the template-owned files that ruff 0.15 reformats, and its own multi-line lambdas take new parentheses.
+- **Step 9:** the readyz body's new shape also reaches app docs and scripts that read it (FieldnotesApp's `docs/slice-test-plan.md` wait loop and `docs/rest-api.md`), not only `.kubecoder` comments. A readyz without an SSE gateway now answers 200 (`degraded`) where it answered 503.
+- **Step 12:** `pnpm update` re-sorts `package.json`'s `devDependencies`; an app whose file is in the render's order keeps the order. The template's `package.json` still asks for `eslint-plugin-react-hooks` `^7.0.1`, though the changelog says 7.0.x fails the template's own lint (an existing lock is the only way to get 7.0.x).
+
+**Operator items:** none new.
 
 ## Phases
 
