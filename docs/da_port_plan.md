@@ -56,7 +56,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 |---|---|---|---|
 | 0 | Dedup and facts | done 2026-10-17 | parent `7cb4426` |
 | 1 | uv everywhere, dependency bumps | done 2026-10-17 | backend `5cbec2a`, `7353261`; frontend `f3dfb72`; parent `7b06a55`, `23459f1` |
-| 2 | Backend: PostgreSQL testing | todo | |
+| 2 | Backend: PostgreSQL testing | done 2026-10-17 | backend `6a2d04e`, `a29fd98`, `c9fba33`; parent `241d216` |
 | 3 | Backend: fixes, stages, internals fact | todo | |
 | 4 | Backend: auth | todo | |
 | 5 | Backend: readiness, SSE, small takes | todo | |
@@ -115,6 +115,32 @@ Record the stop in the phase log, and leave the phase `blocked`.
   - `Jenkinsfile.jinja` only swapped its install and run lines; phase 8 replaces the file.
   - `CLAUDE.md` (the downstream-apps table) and `downstream_sync_process.md` (the sync-status rows) still call FieldnotesApp and PilotApp "on uv, not Poetry". The FieldnotesApp row also says to move the template to uv at its first sync. Phases 15 and 16 rewrite those rows.
 - **Small choices:** `regen.sh` (backend, root) exports `UV_LINK_MODE=copy`, and the backend repo sets `link-mode = "copy"`, because the sidecar's uv cache and `/work` are different mounts. `scripts/test_all.py` runs `uv sync` without `--locked`, so a stale lock is re-locked, as Poetry's retry did.
+
+### 2026-10-17, phase 2: backend PostgreSQL testing
+
+- **Deviation: the Playwright SQLite seed stays until phase 6.** `initialize-sqlite-database.sh`, `testing-server.sh --sqlite-db` and the SQLite branch of `upgrade_database(recreate=True)` are still in the template, used only by Playwright's global setup. Removing them now would leave the Playwright suite red until phase 6, and phases 3–5 (auth, SSE) need it as a gate. Phase 6 removes all three with FE23, plus `copier.yml`'s exclude line for the script. pytest uses no SQLite.
+- **What the fixtures are now** (`tests/conftest_infrastructure.py`, `use_database`):
+  - `run_databases` (class `RunDatabases`), session-scoped: sweeps, then builds `<database_name>_test_<8 hex>_tpl` from `template0` in production's locale, with `upgrade_database()` and `post_migration_hook`. `clone(name)` and `drop(url)` serve the other fixtures. A run holds one admin connection named after its prefix (`application_name`); the sweep skips live runs and any database with connections, and drops without `FORCE`. The run drops its own databases `WITH (FORCE)` at the end.
+  - `app`, session-scoped, on `<run>_main`. `session`: savepoints in a transaction rolled back at teardown; only `close()` is a no-op. `container` makes `session_maker` return it; `client` depends on `container`; `oidc_app` (same database, OIDC on) gets the test session too.
+  - `committed_app`: a clone of its own with real commits, dropped afterwards.
+  - The autouse `session_app_isolation` re-wires `app.api` to the session app when another app took the wiring (checked through dependency-injector's registry, so a re-wire, ~15 ms, happens only when needed), and undoes provider overrides a test leaves on the container.
+  - `test_settings` and `test_app_settings` are session-scoped with a database. `clear_prometheus_registry` is opt-in with a database; every app the fixtures build clears the registry first. pytest loads `.env`, then `.env.test` over it.
+  - No-database apps keep the function-scoped app and the autouse registry clear.
+- **New template-owned files:** `tests/test_database_schema.py` (the database is at the Alembic head; `compare_metadata` finds no drift; passes on an app without revisions) and `scripts/wait-for-services.py` (correction 3: a login on `TEST_DATABASE_ADMIN_URL`, its default if unset, and an HTTP answer from `S3_ENDPOINT_URL` if set; 60 s). The root suite runner already calls the script; phase 8 needs no change for it.
+- **BE-C18 (correction 14):** `TEST_DB_POOL_SIZE = 2` and `TEST_DB_POOL_MAX_OVERFLOW = 3` in `app/config.py`. `Settings.load()` takes them under `FLASK_ENV=testing` unless `DB_POOL_SIZE` or `DB_POOL_MAX_OVERFLOW` is set (each on its own, via `model_fields_set`). The Playwright backends therefore get the small pool without any `DB_POOL_*` in `servers.ts` (phase 6). The pool tests (`TestTestModePool` in mother `test_config.py`) were written now: **phase 3's BE-T15 skips its pool part.**
+- **BE-C09 and correction 5:** `testing-server.sh` takes `--database-url`, sources `.env.test` (the app reads `.env` itself), lets the flag win over `.env.test`, and execs `uv run dev`. `run.py` runs `app.run(..., use_reloader=False)` and has no `WERKZEUG_RUN_MAIN` branches, so **the dev stack has no auto-reload until phase 5's `watchmedo` and phase 8's `Procfile.dev`.** `Settings.set_engine_options_override()` is gone; no app calls it.
+- **Mother suite:** `backend/tests/conftest_infrastructure.py` is a symlink to `test-app/tests/conftest_infrastructure.py`, so the mother suite runs on the rendered template fixtures and `tests/conftest.py` holds only the SSE fixtures (`sse_server` on its own clone; `tests/integration/conftest.py` wires the SSE app during those tests). New: `test_database_fixtures.py` (savepoint semantics, isolation, `committed_app`, the sweep) and `test_database.py` (`upgrade_database`, including `recreate=True`, on PostgreSQL). Counts: mother 357, domain 9; Playwright green at one worker, and `worker-isolation.spec.ts` alone at two (peak 5,368 MB, at the container's limit).
+- **For phase 3:** BE-C05 changes `DiagnosticsService`'s metrics, which register in its constructor; its mother tests request `clear_prometheus_registry`. `drop_all_tables()` empties `db.metadata` (harmless in the CLI's one-shot process; `test_database.py` stubs it). BE-C02 may want to stop that too.
+- **For phase 6:** use a prefix of its own (for example `<database_name>_e2e_`): the pytest sweep only touches `<database_name>_test_`. Start from `testing-server.sh --database-url`; the template DB clone and locale are in `RunDatabases` as a model.
+- **For phases 11, 12 and 16 (the database apps), in `tests/conftest.py` and app-owned tests:**
+  - Overrides of `test_settings` and `test_app_settings` must be `scope="session"` (pytest raises `ScopeMismatch` otherwise): `tmp_path` becomes `tmp_path_factory` (IoTSupport's `test_app_settings`), and `database_url="sqlite..."` goes (IoTSupport's `test_settings`). `_build_test_settings` stays importable by name (EI).
+  - `template_connection` is gone. EI's `sse_server` and IoTSupport's `testing_template_connection` rebuild on `run_databases.clone()` or `committed_app`; tests that call `create_app()` themselves get the wiring restored at the next test, but need a database from those fixtures.
+  - The session app keeps in-memory state across tests: a test that sets a lifecycle flag, config value or service state undoes it (`monkeypatch`). Overrides on the container are undone automatically.
+  - Tests that construct services registering their own metrics request `clear_prometheus_registry`.
+  - Writes through Flask-SQLAlchemy's `db.session` are not on the test's session and commit for real into `<run>_main`: move them to `session` (EI's `test_database_constraints.py`, 143 uses).
+  - Sequences are not rolled back, so literal IDs in asserts fail (EI's `box_no` asserts, worklist §5).
+  - Every database app now runs the drift test; models and revisions must match (EI's `with_variant(..., "sqlite")` columns).
+  - Nothing to set in `.env.test`: the default `TEST_DATABASE_ADMIN_URL` is the sidecar. CI needs the `postgres` service (phase 8).
 
 ## Phases
 
