@@ -58,7 +58,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 1 | uv everywhere, dependency bumps | done 2026-10-17 | backend `5cbec2a`, `7353261`; frontend `f3dfb72`; parent `7b06a55`, `23459f1` |
 | 2 | Backend: PostgreSQL testing | done 2026-10-17 | backend `6a2d04e`, `a29fd98`, `c9fba33`; parent `241d216` |
 | 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
-| 4 | Backend: auth | in progress: steps 1–2 done | backend `7db254c`; parent: the steps 1–2 entry |
+| 4 | Backend: auth | in progress: steps 1–3 and 5 done | backend `7db254c`, `997ea1f`, `c3b8607`; parent: the steps 1–2 and steps 3 and 5 entries |
 | 5 | Backend: readiness, SSE, small takes | todo | |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | todo | |
 | 7 | Frontend: stages, SSE, defaults | todo | |
@@ -220,6 +220,32 @@ BE-C01 and BE-C12 with BE-T09 landed in one backend commit (`7db254c`), as the w
   - FieldnotesApp's `app/api/oidc_hooks.py` conflicts (phase 15). Its `authenticate()` copy of the old hook body goes. If the FN-38 binding stays, its hook calls `authenticate_api_request(...)` and then binds. An old body kept by mistake fails at its first request, because `throw_on_error` is required. Its `_editor()` (`api/inbox.py:49`) now gets `local-user` with OIDC off instead of `None`.
   - IoTSupport's `device_log_stream.py` already ignores the caller with OIDC off, so it is unaffected.
 - **Gates:** `kc project build`, `test` (mother 518 → 584, domain 9, root backend suite) and `lint` are green. Playwright passed at one worker (3,302 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (5,343 MB peak).
+
+### 2026-10-17, phase 4, steps 3 and 5: task owners, role hierarchy
+
+BE-T16 landed in backend `997ea1f`, BE-C25 in `c3b8607`.
+
+- **BE-T16, the rule.** `GET /api/tasks/<id>/status`, `POST .../cancel` and `DELETE /api/tasks/<id>` serve only the task's owner, the caller whose subject equals `TaskInfo.subject`.
+  - Any other caller gets the same 404 body as for an unknown id, and nothing is cancelled or removed. The role tiers still apply first: status at read, cancel and delete at write.
+  - **Tasks with no subject:** with OIDC off, the local admin (`local-user`) owns every task, those without a subject included. With OIDC on, a task without a subject belongs to nobody, admins included. This matches correction 7 (OIDC on: no-subject events go to nobody; OIDC off: to the `local-user` sentinel).
+  - A test session under OIDC off is a caller of its own and owns only its own tasks. The local admin's exemption needs OIDC off, so a JWT with `sub=local-user` owns nothing.
+  - `app/api/tasks.py` became `tasks.py.jinja` (helpers `_caller_owns`, `_find_caller_task`). With `use_oidc=false` (no app has it) there is no identity, and the render is unchanged.
+  - Mother tests: `TestTaskOwnership` in `tests/test_task_api.py` (9).
+- **BE-C25.** `AuthService(..., role_hierarchy=None)`, a `role_hierarchy` property (a copy of the input), and `x-auth-roles.hierarchy` in the OpenAPI spec, present as `{}` when off. The frontend's `generate-api.js` reads only `x-auth-roles.read`. The app-owned `container.py.jinja` is unchanged; an app that wants a hierarchy passes it to `AuthService` in its own container.
+  - **Deviation from DA:** the tier chain and the hierarchy form one graph, and cycle detection and the closure run over both. So `{"editor": ["portal"]}` gives an admin `portal` too, where DA's one-step lookup left admins without it. `{"reader": ["editor"]}` is rejected as a cycle, where DA accepted it and let every reader write. The cycle error names the path.
+  - Tests: `tests/services/test_auth_role_hierarchy.py` (31). It holds DA's expansion, validation, cycle and property cases, plus cases for the tier chain, the role checks, `x-auth-roles` and `/api/auth/self`. DA's portal-endpoint and role-map cases are DA-specific and stay out.
+- **For step 4:** steps 3 and 5 touched neither `app/api/auth.py`, `oidc_hooks.py` nor `app/utils/auth.py`.
+- **For phase 5:**
+  - Keep the SSE rule and the REST rule the same: a task's events go to its subject, plus `local-user` with OIDC off, and to nobody when there is no subject with OIDC on.
+  - `/api/testing/tasks/start` (`api/testing_sse.py`) sits on its own blueprint outside `api_bp`, so the OIDC hooks never run there: `get_auth_context()` is always `None`, and its tasks have no subject. Under OIDC on their events will go to nobody once correction 7 lands, and the task endpoints already refuse them.
+  - `start_task`'s docstring still says a `None` subject broadcasts; BE-T10 rewrites that.
+- **What apps must check (phases 11–16):**
+  - No app frontend and no Playwright spec calls the task endpoints; they appear only in generated hooks. The worklist's note that FieldnotesApp's UI polls `GET /api/tasks/<id>/status` does not hold: its frontend has no such call, and the actioner's task id (`actioner.py:491`) never reaches a client.
+  - EI's `ai_parts.py:124,258` tasks have no subject, so under OIDC on their task endpoints answer 404 to everyone until phase 12 passes `caller_subject`. EI's frontend doesn't call them.
+  - App tests that start a task as one subject and call the endpoints as another, or start one without a subject under OIDC on, now get 404. FieldnotesApp's `tests/test_sse_identity.py` uses a task id that doesn't exist, so it is unaffected.
+  - `role_hierarchy` is opt-in, and no app needs it. Each app's OpenAPI spec gains `x-auth-roles.hierarchy: {}`.
+- **Gates:** `kc project build`, `test` (mother 584 → 624, domain 9, root backend suite) and `lint` are green. Run once after both steps; each step's commit had its regen and the targeted mother tests green first.
+- **Playwright not run:** no frontend template code or spec calls `/api/tasks/*`, and the frontend doesn't read `x-auth-roles.hierarchy`.
 
 ## Phases
 
