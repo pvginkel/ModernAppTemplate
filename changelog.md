@@ -8,6 +8,185 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-10-17 — Root v0.2.0, Backend v0.14.0, Frontend v0.21.0
+
+The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered by `docs/da_port_plan.md` (phases 1–10), plus the move of all three templates to uv. The three releases ship together, and an app takes them in one sync. The first section is the sync's checklist, in the order a sync runs. The sections after it say what changed, and each points back at its steps. The plan's phase log has the long per-app detail (file and line numbers, survey results). An app still on an older release (FieldnotesApp: root v0.1.2, frontend v0.20.2) reads the older entries too.
+
+### Syncing an app to this release
+
+**What changed:** everything in the sections below. `copier update` brings the template-owned files. The steps after it are app-owned edits, which copier does not make. (EI = ElectronicsInventory, IoT = IoTSupport. The database apps are EI, IoT and PilotApp; the S3 apps EI and IoT; the Poetry apps EI, IoT, DHCPApp and ZigbeeControl.)
+
+**Migration steps:**
+
+1. **Start clean.** Every `copier update` needs a clean tree, so commit after each one. Run copier from the component's directory (`/work/<App>`, then `backend/`, then `frontend/`):
+   ```bash
+   cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+   ```
+2. **Root `copier update`.** Commit.
+   - `Jenkinsfile` conflicts across the whole file, because the old render was the scripted file and every app runs a declarative `modernApp.test` file. Resolve it to the app's file plus the template's new lines: `STAGE: 'tst'` and `BUILD_CACHE: 'true'` in `env:`, with their comments. Per app:
+     - The Poetry apps: `install: 'uv sync --locked --no-dev'` and `run: 'uv run --no-sync'`.
+     - IoT: add the `postgres` service. Keep the `withVault` wrapper, the OpenSearch service, the Keycloak env and `secrets:`.
+     - EI: add the `postgres` service. Keep the docs-image stage and the three-image header. The S3 block already matches.
+     - DHCPApp: keep `Job: Dnsmasq/DHCPApp` and its own header wrapping.
+     - ZigbeeControl: keep its "No data sidecars" comment.
+     - FieldnotesApp: only the `env:` lines change.
+     - PilotApp: add the `postgres` service and the comments above `modernApp.test`.
+   - `Jenkinsfile.architecture` is app-owned (`_skip_if_exists`), so copier leaves every app's file alone.
+3. **Backend `copier update`.** Commit. The update deletes `scripts/dev-server.sh` and `scripts/initialize-sqlite-database.sh`.
+   - FieldnotesApp and PilotApp: where their own uv edits to template-owned files differ from the template, take the template's. Then drop uv, `scripts/dev-server.sh` and any other edit the template now covers from their `CLAUDE.md`'s list of standing template edits.
+   - IoT: its own `scripts/wait-for-services.py` (OpenSearch wait, S3 bucket creation) meets the template's, which is template-owned now. Settle where the OpenSearch wait and the bucket creation go before resolving.
+   - FieldnotesApp: `app/api/oidc_hooks.py` and `app/services/sse_connection_manager.py` conflict. Drop the FN-38 binding (`bind_unbound_identity`, the `X-SSE-Request-Id` binding, `tests/test_sse_identity.py`), and with it its `authenticate()` copy of the old hook body. An old body kept by mistake fails at its first request, because `throw_on_error` is now required.
+   - PilotApp: take the template's side of `3f84260` in `app/api/sse.py`, `app/services/testing_service.py`, `app/api/testing_auth.py` and `app/schemas/testing_auth.py`. The SSE force-callback-error hook now lives in `api/testing_sse.py`, at the same URL.
+4. **Frontend `copier update`.** Commit.
+   - IoT: drop `xfwd: true` from the `vite.config.ts` proxies. On `/api` it puts `https,http` in `X-Forwarded-Proto` and breaks the dev login's redirect URI. Keep the esptool alias and `optimizeDeps`.
+   - FieldnotesApp: drop its FN-38 edits to `sse-worker.ts` and `sse-context-provider.tsx`, and the `X-SSE-Request-Id` header in `src/lib/api/sse-connection.ts`.
+   - PilotApp: take the template's side of `8b8cf41` in `sse-worker.ts`, `sse-context-provider.tsx` and `playwright-binding.d.ts`.
+   - DHCPApp: delete the re-created `public/favicon.png` again.
+5. **Packaging to uv** (the Poetry apps). Convert the root and `backend/` `pyproject.toml` to PEP 621 with uv, following `docs/da_port_worklist.md` §3, "App-owned packaging". Run `uv lock` in both, check the locked versions against `poetry.lock` package by package, then delete `poetry.lock`. In `.kubecoder/project.yaml`, `poetry install --no-interaction` becomes `uv sync --locked` and `poetry run X` becomes `uv run X`. Reword the comments that name Poetry (EI's `.kubecoder/config.yaml`; IoT's and ZigbeeControl's `project.yaml`) and the app's `CLAUDE.md`.
+6. **Dependency pins**, in app-owned `backend/pyproject.toml`:
+   - `spectree>=2.0.0,<3`, `flask-cors>=6.0.0,<7`, `pillow>=12.0.0,<13` (S3 apps);
+   - in the dev group: `ruff>=0.15.0,<0.16`, `pytest>=9.0.0,<10`, `pytest-cov>=7.0.0,<8`, `types-flask-cors>=6.0.0,<7`, and the new `watchdog[watchmedo]>=6.0.0,<7`; drop `types-pillow`;
+   - under `[tool.ruff]`, `exclude = ["vulture_whitelist.py"]` becomes `extend-exclude`.
+
+   Pin `ruff==0.15.22` in the root `pyproject.toml`. Run `uv lock`, then `uv run ruff check --fix`: ruff 0.15 re-sorts some imports. App code that reassigns `img = img.convert(...)` needs the Pillow typing fix the template's own code got.
+7. **`backend/app/services/container.py`:** move `lifecycle_coordinator` and `health_service` above `s3_service`. Pass `health_service=health_service` to `S3Service` (S3 apps) and to `SSEConnectionManager` (all six). Without it, readyz silently lacks `s3` or `sse_gateway`. `test-app-domain/app/services/container.py` in the backend repo shows the result. Roles need no edit: every app has an `editor` client role (EI also `reader`), and the operator ruled no lockout to handle. `role_hierarchy` is opt-in, and no app needs it.
+8. **`backend/app/app_config.py`** (optional): to have the boot log dump `AppSettings` too, add `def dump_for_logging(self): return dump_config_for_logging(self)`, and mark every secret `Annotated[str, Sensitive]` (EI: `OPENAI_API_KEY`, `MOUSER_SEARCH_API_KEY`). Without the method nothing is dumped, so nothing leaks.
+9. **App code** (the phase log has the lines):
+   - Every direct `send_event` call takes a `Target` first: IoT `device_log_stream_service.py` → `Target.connection(request_id)` and `rotation_nudge_service.py` → `BROADCAST_TARGET`; DHCPApp `api/internal.py` → `BROADCAST_TARGET`; ZigbeeControl `tab_status_service.py` → `BROADCAST_TARGET` and `Target.connection(request_id)`. A narrower target than `BROADCAST_TARGET` is the app's call; the convention is broadcast for infrastructure events only.
+   - EI: `api/ai_parts.py` passes `caller_subject` to its two `start_task` calls, or their progress reaches nobody under OIDC. `part_service.py` and `inventory_service.py` page by `created_at` alone: move them onto `apply_sorting()`, or add the `id` tiebreaker. `services/metrics/dashboard_metrics.py` moves to `app.database.scoped_session`. Its two progress components (`ai-part-progress-step.tsx`, `ai-part-cleanup-progress-step.tsx`) stop multiplying `progress.percentage` by 100.
+   - IoT: delete its own `ExternalServiceException` and 502 handler, and import the class from `app.core_exceptions` (not re-exported from `app/exceptions.py`: that import is circular). `services/coredump_service.py` moves to `scoped_session`.
+   - FieldnotesApp: `register_readyz("store", ...)` becomes `register_check("store", ..., critical=True)`, with `_readyz` returning a `CheckResult`. Reconcile its own `FIELDNOTES_LOG_LEVEL` with the template's `LOG_LEVEL`. The actioner's system task (no subject) now sends its events to nobody under OIDC: pass a subject, or accept it.
+   - The comments in IoT's and EI's `.kubecoder/config.yaml` that say readyz reports `database.connected` now mean `checks.database.status`.
+10. **`backend/tests/conftest.py` and the app's tests.**
+    - The database apps' tests now run on PostgreSQL, through the template's fixtures. Overrides of `test_settings` and `test_app_settings` become `scope="session"` (`tmp_path_factory`, no `database_url="sqlite..."`). `template_connection` is gone: rebuild on `run_databases.clone()` or `committed_app`. Writes through `db.session` move to the `session` fixture (EI's `test_database_constraints.py`). Literal sequence IDs in asserts fail (EI). Tests that leave in-memory state on the session app undo it. Tests that build services with their own metrics request `clear_prometheus_registry`. The schema drift test must pass, so models and revisions must match (EI's `with_variant(..., "sqlite")` columns).
+    - EI's and IoT's `StubLifecycleCoordinator` (`tests/testing_utils.py`) gains `unregister_lifecycle_notification`.
+    - Tests that assert the old call shapes change: `send_event`'s first argument is a `Target` (`== BROADCAST_TARGET`, not `is None`); readyz bodies (FieldnotesApp `json()["checks"]["store"]`, and `health_service.clear_cache()` between a passing and a failing check); a version event read on connect without queueing one first now gets none in a local stage; `Settings(flask_env="production")` gives `stage == "prd"` and no exception text in a 500.
+    - Tests that start a task as one subject and call `/api/tasks/*` as another, or start one without a subject under OIDC, get 404.
+    - PilotApp: `tests/test_sse_callback.py` largely duplicates the template's `tests/api/test_sse_callback.py`: drop it, or keep only Pilot's role cases.
+11. **`.env*`.** App-owned `backend/.env.example` gains `STAGE` (commented out), `HOMELAB_INTERNAL`, `LOG_LEVEL` and `MAX_UPLOAD_SIZE_MB` (see the template's). The dev `.env` and `.env.test` need nothing: `FLASK_ENV` gives the local stage, and `TEST_DATABASE_ADMIN_URL` defaults to the `postgres` sidecar. EI sets `MAX_UPLOAD_SIZE_MB` above 50 only if it raises nginx's 50 MB limit too.
+12. **`frontend/package.json`:** add `pg` and `@types/pg` (`^8.23.1`) to `devDependencies`, in every app (the Playwright global setup imports them, database or not), and `"generate:api:with-backend": "python3 ../scripts/regenerate-openapi.py --frontend"` to `scripts`. The `build-fast`/`build` split is optional. Run `pnpm install`.
+13. **`frontend/src/styles/button.ts`:** add `whitespace-nowrap` after `justify-center` in both `buttonBaseClasses`.
+14. **`backend/Dockerfile`** (needs DockerImages `7e7c1f7` pushed and `modern-app-backend-build` rebuilt first, or the build fails with `uv: not found`). The build stage becomes `FROM registry:5000/modern-app-backend-build AS build` and loses its `ENV` lines, apt block and `pip install`. The runtime stage becomes `FROM registry:5000/modern-app-backend` and loses its apt block. The Poetry apps also take `COPY pyproject.toml uv.lock /app/` and `RUN uv sync --locked --no-dev --no-install-project`. IoT rewrites its short file to the template's default, keeping `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1` in the runtime `ENV`. FieldnotesApp keeps its runtime `git ca-certificates` install, its extra `COPY` lines and `--no-editable`. The frontend `Dockerfile` is template-owned and arrives with step 4.
+15. **Refresh the frontend's OpenAPI cache** after the backend edits: `python3 scripts/regenerate-openapi.py --frontend` at the root (or `pnpm generate:api:with-backend`), and commit `frontend/openapi-cache/openapi.json`. Until then, `tsc` fails (`use-ui-setup.ts` imports `useGetUiSetup`) and so does the new `tests/test_openapi_cache.py`. If that test still fails right after a refresh, the app's document depends on its settings (a blueprint registered under a flag, for example); find that before changing the test.
+16. **Gates:** the app's `kc project setup`, `build`, `test` and `lint`, and its Playwright suite through `uv run run-suite --suite frontend`. Look at the behaviour changes below when a test changes outcome. Keep `vulture_whitelist.py`, `knip` and `.codehealthignore` current.
+17. **The deploy repo** (`/work/scratch/deploy/<repo>`): set `STAGE=prd` and `HOMELAB_INTERNAL=true` in all six, in the backend container's `env:` in the chart templates and on its init container where it has one (the values files set no env; `docs/da_port_worklist.md` §5 names each repo's file). PilotApp's `tests/render-chart.py` checks the env, so update it with the change. Keep `BASEURL`: it still sets the cookie's `Secure` flag.
+18. **The IdP client** (Keycloak, an operator action): add `https://<host>/api/auth/callback` as a valid redirect URI and `https://<host>/*` as valid post-logout redirect URIs for every hostname a browser signs in on. Hosts: IoT `iot.ginbov.nl`, EI `parts.ginbov.nl`, DHCPApp `dhcp.home`, ZigbeeControl `z2m.webathome.org`, FieldnotesApp `fieldnotes.home` (check whether its other hosts serve the UI), PilotApp `pilot.ginbov.nl`. A dev environment with OIDC on signs in on `https://frontend.<env-id>.home`. After deploying, check that the login's `redirect_uri` reads `https://<host>/...`.
+19. **The architecture YAML: nothing to do.** All six apps already produce their model on the library's `architectureProducer` (plan correction 1), so only new apps seed one. The `aac-tools` toolchain and `arch-validate` lint step in `.kubecoder/*` are optional, and the operator's call.
+
+### uv replaces Poetry; dependency bumps
+
+**What changed:**
+- Backend: `pyproject.toml` is PEP 621 (`[project]`, `[dependency-groups]`, `[project.scripts]`, hatchling), with a `uv.lock`. Every `poetry run` in template-owned files is `uv run`. Bumps: spectree 2, flask-cors 6, Pillow 12 (with the typing fix), pytest 9, pytest-cov 7, ruff 0.15, types-flask-cors 6; types-pillow is gone. The `Dockerfile` default installs with `uv sync`.
+- Frontend: Playwright's global setup runs the backend CLI with `uv run`.
+- Root: the suite runner, `Procfile.dev`, `scripts/dev.py`, `scripts/regenerate-openapi.py`, the generated `project.yaml` and `CLAUDE.md` run on uv; `pyproject.toml` pins `ruff==0.15.22`. A new app's `project.yaml` runs `uv sync` without `--locked`, since it has no `uv.lock` until its first setup.
+
+**Migration steps:** sync steps 5, 6 and 14.
+
+### Backend tests and Playwright run on PostgreSQL
+
+**What changed:**
+- Backend: `tests/conftest_infrastructure.py` builds one template database per run from the revisions (`upgrade_database()` and the post-migration hook) in production's locale, and serves a session-scoped `app` on a clone of it. `session` is a savepoint session rolled back after each test; `committed_app` gets a clone with real commits. Leftovers from dead runs are swept. Test pools are small (`TEST_DB_POOL_SIZE = 2`, `TEST_DB_POOL_MAX_OVERFLOW = 3`, unless `DB_POOL_*` is set). New template-owned `tests/test_database_schema.py` (the database is at the head, and the models match it) and `scripts/wait-for-services.py` (waits for `TEST_DATABASE_ADMIN_URL`, and `S3_ENDPOINT_URL` when set). `testing-server.sh` takes `--database-url` and runs `uv run dev`. SQLite is gone: `initialize-sqlite-database.sh`, `--sqlite-db`, the SQLite branch of `upgrade_database(recreate=True)` and `Settings.set_engine_options_override()`.
+- Frontend: Playwright's global setup builds a seed database (`<project_name>_e2e_<run>_seed`) with the backend's `load-test-data` when the backend has `alembic.ini`, each worker's backend serves its own clone, and the new `global-teardown.ts` drops them (`tests/support/helpers/pg-admin.ts`, on `pg`). The `postgres` sidecar is the default server.
+- Root: CI's validation Job runs a `postgres:18-trixie` service under `use_database`.
+
+**Migration steps:** sync steps 2, 10, 11 and 12. The database apps' test data must load on PostgreSQL through the revisions.
+
+### Stages and the internals fact
+
+**What changed:**
+- Backend: `STAGE` (`local-dev`, `local-tst`, `dev`, `tst`, `uat`, `prd`; `Settings.stage`) defaults to `local-tst` under testing, `local-dev` under development and `prd` for any other `FLASK_ENV`. `HOMELAB_INTERNAL` (default false) is a deploy setting. `Settings.expose_internals` is true when the stage isn't `prd` or the app is internal. The 500 catch-all shows the exception text only when it is true. New `GET /api/ui-setup` returns `stage` and `expose_internals` to a signed-in user. On `prd`, `upgrade-db --recreate`, `load-test-data` and the testing endpoints refuse. The boot log dumps every setting, with `Sensitive` ones masked. `LOG_LEVEL` sets the root logger's level, and `MAX_UPLOAD_SIZE_MB` (default 50) sets `MAX_CONTENT_LENGTH`.
+- Frontend: `useUiSetup()` reads `/api/ui-setup` once signed in (`null` on any failure, a 403 included). Where `expose_internals` is true, an error toast's icon becomes a button that copies the message and its diagnostics. Shell apps show the stage badge in the top bar, hidden on `prd`; its colour is the `--stage-indicator` token, which `app-theme.css` can override.
+- Root: CI runs `STAGE=tst`. The dev stack seeds no `STAGE`.
+
+**Migration steps:** sync steps 8, 11 and 17.
+
+### Auth: roles, one identity path, the redirect origin, task owners
+
+**What changed:** backend, and the frontend's dev proxy.
+- **Roles.** A signed-in caller holding none of the app's configured roles gets 403 on every `/api` endpoint, before the per-tier check, `@public` ones included. `@no_role_check` exempts login, callback and logout. With OIDC off, every request runs as the local admin (`local-user`), exempt from role checks. Opt-in `role_hierarchy` on `AuthService`, with cycle detection over the tiers and the hierarchy; the OpenAPI spec gains `x-auth-roles.hierarchy` (`{}` when off).
+- **Identity.** `resolve_auth_identity()` is the one identity path (test session, local admin, JWT). Tolerant mode (`@public`) reads the access token from the cookie only, never the Authorization header, so device and client bearer tokens stay the endpoint's business, and `/api/auth/self` no longer accepts a bearer token. `authenticate_request(..., *, throw_on_error)` requires the flag. Logout sets `g.clear_auth_cookies`.
+- **Redirect origin.** Login builds the OIDC `redirect_uri` from the request's origin (behind `ProxyFix`) and keeps it in the encrypted state, where it used to use `BASEURL`. A `redirect` parameter must be a path on this origin; an absolute URL gets 400. The Vite dev proxy forwards `X-Forwarded-Host` and `X-Forwarded-Proto` (`forwardOrigin`), and must not use `xfwd`.
+- **Task owners.** `GET /api/tasks/<id>/status`, `POST …/cancel` and `DELETE /api/tasks/<id>` serve only the task's subject; anyone else gets the unknown-id 404. With OIDC on, a task without a subject belongs to nobody. The 404 is now the error envelope (`code: RECORD_NOT_FOUND`), with the messages "Task <id> was not found", "Cancellable task <id> was not found" and "Finished task <id> was not found".
+
+**Migration steps:** sync steps 4 (IoT's `xfwd`), 7, 10 and 18.
+
+### Readiness checks and the readyz format
+
+**What changed:** backend.
+- `GET /health/readyz` answers `{"status", "ready", "stage", "checks": {"<name>": {"status": "ok"|"error"|"disabled", "critical", "detail"?}}}`. `status` is `ok`, `degraded` (a non-critical check failed; 200), `not_ready` (a critical one failed; 503) or `shutting_down` (503). The old body had a top-level key per check with an `ok` flag. Healthz answers `{"status": "alive", "ready": true}`.
+- Services register their own checks: `HealthService.register_check(name, check, *, critical, timeout=0.8)`, with `check()` returning a `CheckResult`. `register_readyz` and `register_healthz` are gone. The checks are `database` and `s3` (critical) and `sse_gateway` (not critical). They run concurrently, each within its timeout, and a passing result is cached for 30 s.
+- The probes read the status code only, so the deploy repos need nothing.
+
+**Migration steps:** sync steps 7, 9 (FieldnotesApp, the `.kubecoder` comments) and 10.
+
+### SSE: typed targets, refused connects, the client's recovery
+
+**What changed:**
+- Backend: `send_event(target, event_data, event_name, service_type)` takes a required `Target`: `Target.connection(request_id)`, `Target.subject(subject)`, `LOCAL_ADMIN_TARGET` or `BROADCAST_TARGET`. A request ID or `None` raises `TypeError`, and `target_subject` is gone. A task's events go to its owner, and to nobody under OIDC when it has no subject (they used to broadcast). The local admin is a flag on the binding (`bind_identity(..., local_admin=False)`). The gateway's connect callback answers 401 to a missing or invalid token and 403 to a caller without the read role. `POST /api/testing/sse/force-callback-error?status=401|403` makes the next connect refuse. The version service sends nothing on a failed fetch (no `"unknown"` version), and nothing on connect in a local stage unless a version was queued. `use_sse` without `use_oidc`, which failed at import, now renders and runs (new apps only: the fix is in app-owned `container.py`).
+- Frontend: the stream counts as connected on the gateway's `ready` event, not on open. On `rejected`, the client refreshes the session through `/api/auth/self` and reconnects; a 401 sends the user to login, and anything else shows "Connection to the server was lost. Please refresh the page to reconnect." There is no retry loop, on the SharedWorker and the direct path alike. `SseGate` no longer holds the page back (no `sse.gate.loading`), and `deploymentSse.ensureConnected()` waits for the mount connection. `reconnect()` reaches a live worker, the test bridge is `window.__sseForceReconnect`, and the SharedWorker opt-in (`?__sharedWorker`) survives a redirect. FE03: `percentage` is `value * 100`.
+
+**Migration steps:** sync steps 3, 4, 9 and 10.
+
+### Backend fixes and additions
+
+**What changed:**
+- Werkzeug HTTP errors without a handler of their own (413, 415, …) answer their own status instead of 500. Requests that match no route are labelled `endpoint="unknown"` in the request histogram, where they used to carry the path; `DiagnosticsService.request_duration_seconds` is gone.
+- `scoped_session` and `scoped_savepoint` in `app/database.py`; `after_commit()` runs after a scoped session's commit too. Alembic's `fileConfig` no longer silences the app's loggers, and `drop_all_tables()` no longer empties `db.metadata`.
+- `LifecycleCoordinatorProtocol.unregister_lifecycle_notification` is a new abstract method, and the log stream's `connection_close` event is gone. `allow_empty` column info opts a column out of empty-string normalization. The CLI's "Using database" line masks the password.
+- New template-owned `app/core_exceptions.py` with `ExternalServiceException(operation, cause)` (502, `EXTERNAL_SERVICE_ERROR`). `schemas/common.py` gains `ApiErrorResponseSchema` and, for paged lists, `PaginationQuerySchema` and `SortDirection`, with `apply_sorting()` (`id` tiebreaker) and `build_pagination_meta()` in `app/utils/pagination.py`.
+- `scripts/dev-watch.sh` runs `uv run dev` under `watchmedo auto-restart`, replacing `dev-server.sh`; `run.py` runs without the Werkzeug reloader.
+- New template-owned `tests/test_openapi_cache.py` fails when `frontend/openapi-cache/openapi.json` differs from the backend's document (MAT-12).
+- `database_name` defaults to `project_name` with underscores, as the root's does, and `scripts/init-dev-database.py` reads `backend/.env`. No app's render changes.
+
+**Migration steps:** sync steps 3, 6, 9, 10 and 15.
+
+### Frontend fixes and defaults
+
+**What changed:**
+- **Dialogs:** a backdrop click no longer closes a `Dialog` (`preventOutsideClose`, default true; `false` restores it). The overlay carries `data-testid="dialog-overlay"`.
+- **Buttons:** a loading button keeps its width (a spinner overlaid, the label and icon hidden). Enabled buttons get the pointer cursor; the dark theme's `--primary`, `--ring`, `--link-hover` and `--destructive` changed. An app's Tailwind `@source` and `@plugin` lines go in `app-theme.css`.
+- **Generated API types** mark a property with a default as optional, in requests and responses alike, so app code that reads such a response property as always present can fail `tsc`. `scripts/fetch-openapi.js`'s errors name `regenerate-openapi.py --frontend` and `generate:api:with-backend`. `use_oidc=false` builds again, with or without the shell (`auth-redirect.ts` is no longer excluded).
+- **Vite and nginx:** an SSE proxy that flushes (`configureSseProxy`, under `use_sse`), `strictPort`, the test-mode build's `define`/`external` fix, and nginx's `Host $http_host`. `.gitignore` ignores `.env*` except `.env.example`.
+- **Playwright:** preview mode (`VITE_TEST_MODE=true pnpm build`, then `PLAYWRIGHT_PREVIEW_MODE=true`), with the `@preview` tag on specs that need it. Services run in their own process groups, so an interrupted run leaves nothing behind. Readiness waits are 120 s per service and 300 s per worker. Video is off unless `PLAYWRIGHT_RETAIN_VIDEO=true` (any value used to turn it on). An unexpected error toast no longer fails a spec, and a ui-state scope whose data is cached at mount emits `ready` on mount.
+- **The toast helpers now close toasts.** `dismissToast()` matched no element (`button[aria-label="Close"]`; the close button is named by its screen-reader text), so it and the dismissal in `expectSuccessToast()`, `expectErrorToast()`, `expectInfoToast()` and `waitForToastsToDisappear()` were no-ops. They now close the first toast, or every toast. `waitForToastViewportDismissed()` closes every toast and waits for none to be left, instead of sleeping 1 s. `assertToastSequence()` closes each matched toast.
+- **Test bridges:** `__deploymentSseControls.getCurrentVersion()` and `DeploymentSseHelper.waitForCurrentVersion()`; specs wait on conditions, not fixed sleeps.
+
+**Migration steps:** sync steps 4, 12, 13 and 16.
+
+### CI, images, dev stack and tooling
+
+**What changed:** root, unless noted.
+- `Jenkinsfile` is the declarative `modernApp.test` file: `services:` for `postgres` (`use_database`) and RustFS (`use_s3`), `env:` with `STAGE: 'tst'` and `BUILD_CACHE: 'true'`, and the uv `install`/`run` strings.
+- The suite runner restores and saves the pnpm store through the build cache (`--build-cache`, on when `BUILD_CACHE=true`; `scripts/build-cache-get.sh` and `-put.sh`). After the dev-server pass, it runs the `@preview` specs against a test-mode build (`frontend-preview.xml`), and leaves `dist/` a test-mode build.
+- Frontend: `Dockerfile` builds on `registry:5000/modern-app-frontend-build` and restores the pnpm store from the build cache (`ARG BUILD_CACHE_URL`). Backend: the `Dockerfile` default builds on `modern-app-backend-build` and runs on `modern-app-backend` (new apps only; app-owned).
+- `Procfile.dev` runs the backend through `scripts/dev-watch.sh`, so it restarts on a code change.
+- `Jenkinsfile.architecture` (new, `_skip_if_exists`) and a generated `CLAUDE.md` section on the architecture model; new apps get the `aac-tools` toolchain and an `arch-validate` lint step.
+- New `scripts/check_updates.py` lists outdated direct dependencies per component (`cexec modern-app python3 scripts/check_updates.py [--json]`).
+
+**Migration steps:** sync steps 2, 14 and 19.
+
+### Behaviour users and tests will notice
+
+**What changed:**
+- A signed-in user with none of the app's roles gets 403 everywhere, `@public` endpoints called with the session cookie and the SSE connect included. No current user is locked out (operator ruling).
+- With OIDC on, a refused SSE connect shows the "Connection to the server was lost" toast or sends the user to login, and never retries in a loop.
+- A backdrop click no longer closes a dialog.
+- Pages render before the SSE stream is ready. A spec that expects an SSE-delivered update right after `page.goto` calls `deploymentSse.ensureConnected()` first (ZigbeeControl's `tab-manager.spec.ts` is the one candidate found).
+- Shell apps show the stage badge wherever the stage isn't `prd`, the dev stack and CI included. With `HOMELAB_INTERNAL=true`, deployed apps show the copy-diagnostics button and the exception text in 500 responses.
+- An oversized body answers 413, not 500.
+- Readyz has the new body, and can answer 200 `degraded`.
+- Unmatched requests are labelled `endpoint="unknown"` in the request metrics.
+- The task endpoints answer 404 to anyone but the task's owner, with the error envelope as the body.
+- Playwright: the toast helpers really close toasts (EI calls them at about 50 sites), the two SharedWorker specs skip in the dev-server pass and run in the preview pass, and video is off by default.
+
+**Migration steps:** sync step 16. A test that changes outcome at the sync starts here.
+
+### The modern-app conventions guide
+
+**What changed:** the conventions (API, status values, backend code, readiness, SSE, frontend code, testing, Playwright) are a guide, sourced in this repo's `guide/` for https://dev-guides.home/modern-app/, and the `kubecoder:modern-app` skill carries its rules. The guide and the skill change no template.
+
+**Migration steps:** none.
+
 ## 2026-10-07 — Root v0.1.6
 
 ### The validation Job books a CPU request again
