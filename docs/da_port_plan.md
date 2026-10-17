@@ -68,7 +68,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 11 | App: IoTSupport | done 2026-10-17 | IoTSupport `c294800` (root), `c9a67d1` (backend), `21d9d26` (frontend), `c8d48fa` (uv), `a8644f4`, `7481d05`, `db2a3cb`, `49cc3a2`, `6a414da`, `600b8f6`, `b8d3bef`, `b5011b7`, `3efd106`, `e227d07`, `394dde4`, `71d78ea`, `a55c75e`, `e4406be`, `c154080`, `112913f`, `cc5d981`, `7948bf3`, `c6d1337`, `b7741a4`, `e71bb1b` (the `.env.example` BASEURL comment, found in phase 13); IotDeploy clone `6f6ea99` (not pushed); parent `3341c75`, `1a7d192`, `3fd9997`, `1ea48c7`, `d237d6c`, `1a1401f`, this entry; none pushed |
 | 12 | App: ElectronicsInventory | done 2026-10-17 | ElectronicsInventory `f28c42a9` (root), `ab85dee9` (backend), `58ad6a13` (frontend), `966ab2a2` (uv), `f599895f`, `ea134e62`, `f99dd9e8`, `44995302`, `e3f56128`, `24facf44`, `c013e345`, `51cd44e6`, `06ecd407`, `013a6643`, `087d77e9`, `aa6c3c8b`, `f4c744a4`, `e5eb245c`, `76a87c48`, `4c7bbd12`, `f08330db`, `0d96e602`, `98d16280`, `e2ab4788`, `49f322ee`, `2273b788`, `f3fb505b`, `0401148c`, `0f306626`, `479e2926`, `d75a14b1`, `f695d15a`, `0badde29`, `4313093a`, `66da139d`, `3e4eef28`, `c506116e`, `52dc77d8`; ElectronicsInventoryDeploy clone `6f7bae7` (not pushed); parent `4bd9b3c`, `d89b609`, `072777c`, `7ecacf8`, `b8aa97c`, `4b13899`, this entry; none pushed |
 | 13 | App: DHCPApp | done 2026-10-17 | DHCPApp `752e0a8` (root), `c57c73c` (backend), `446f9cd` (frontend), `d04ceb9` (uv), `ab9ebbf`, `3fa7ec1`, `3331d7a`, `ff80b81`, `41be6b9`, `214687b`, `78bb6e3`; DnsmasqDeploy clone `ed61025` (not pushed); parent `c3bec09`, `e9ea80d`, `6d91d3c`, `abf711b`, this entry; none pushed |
-| 14 | App: ZigbeeControl | todo | |
+| 14 | App: ZigbeeControl | in progress: steps 1–5 done | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv); parent: this entry; none pushed |
 | 15 | App: FieldnotesApp | todo | |
 | 16 | App: PilotApp | todo | |
 | 17 | The push | todo | |
@@ -894,6 +894,36 @@ Changelog steps 1–19 in `/work/DHCPApp`, one commit per step or fix (the statu
 - `run-suite`'s default output gives no test counts; pass `--junitxml-dir <dir>` and read the `<testsuites tests=… failures=… skipped=…>` line from `frontend.xml` and `frontend-preview.xml`.
 - A deploy repo whose render check needs `cexec iac`: render it as above, with the downloaded helm on a copy of the chart, so the clone stays clean.
 - The checklist gaps phase 13 found are in the changelog (`e9ea80d`, `abf711b`).
+
+### 2026-10-17, phase 14, steps 1–5: syncs and uv
+
+Changelog steps 1–5 in `/work/ZigbeeControl`, one commit per step. Nothing is pushed. No template change was needed, and no conflict needed a ruling beyond those IoT, EI and DHCPApp used. Steps 6–15 and 16–19 are later chunks.
+
+**Start (step 1).** The tree was clean and level with origin/main (`a4115cc`). `backend/test/` is not a test suite: it holds one file, `tabs.yaml`, the checked-in sample tabs config that `backend/.env`, both `.env.example` files, `.kubecoder/project.yaml`'s setup and `app/app_config.py` point development at. Left alone.
+
+**Sync (steps 2–4).** `6e76751` root v0.2.0, `2a5f924` backend v0.14.0, `08fbf43` frontend v0.21.0.
+
+- **Root:** only `Jenkinsfile` conflicted, in one hunk. It keeps the "No data sidecars" comment above `modernApp.test` (phase 8's note) and takes the uv `install`/`run` pair and `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments. No services. The rest arrived clean (`Procfile.dev`, `scripts/dev.py`, `tools/suite_runner/local.py`, the new `scripts/build-cache-*.sh` and `scripts/check_updates.py`).
+- **Backend:** conflicts in `Dockerfile`, `app/app_config.py` and `pyproject.toml`; hunks in `app/services/container.py`, `tests/conftest.py` and `vulture_whitelist.py`. `tests/test_smoke.py` (new) kept, `.env.example.rej` deleted, `scripts/dev-server.sh` deleted by the update (nothing referenced it).
+  - `Dockerfile`: the template's side, step 14 whole (phase 8's clean swap): both base images, `COPY pyproject.toml uv.lock`, `uv sync --locked --no-dev --no-install-project`. The old `PYTHON*` `ENV` lines were in the build stage, which step 14 drops. Equal to the backend test-app's render but for `EXPOSE 3201` and the database `COPY` lines. Step 14's precondition stands (DockerImages `7e7c1f7` pushed, images rebuilt).
+  - `container.py`: step 7 arrived (`health_service=health_service` on `SSEConnectionManager`; `health_service` already sits above it, no S3). The merge's second `testing_service` provider and the reworded health-service comment were dropped.
+  - `app_config.py`: kept as ZigbeeControl's; the hunk brought `dump_for_logging()` without `Sensitive` marks, the `dump_config_for_logging` import and the docstring, all dropped. `AppSettings` holds no secret (`tabs_config_path`, `k8s_restart_timeout`), so step 8 is optional and safe either way. `pyproject.toml`: kept, converted in step 5. `tests/conftest.py`: the docstring hunk dropped. `vulture_whitelist.py`: took the `uv run` comment (the app had edited the file, so it merged).
+- **Frontend:** conflicts in `package.json` and `src/routes/index.tsx`. `package.json` keeps `split2` and `ssegateway` and takes `generate:api:with-backend`, `pg`, `@types/pg` and the `build-fast`/`build` split; `pnpm install` added only `pg` and `@types/pg` (step 12's `pnpm update` not run). `index.tsx`: ZigbeeControl's `TabManager` page (its `tab-shell.tsx` renders the `UserDropdown` the template's auth specs look for, which the no-shell placeholder carries). A stale `frontend/.env.example.rej` from an earlier update and the new one were deleted. No `public/favicon.png` re-created. `vite.config.ts` merged clean and equals `test-app-no-shell`'s render but for the ports.
+- **`src/styles/button.ts` took nothing:** an unedited render, so copier kept it. Step 13 (`whitespace-nowrap`) is by hand in a later chunk, as in DHCPApp.
+- Violation finder: no post-adoption drift. Pre-existing divergence: root `.gitignore` +1 (worklist §5's standing edit). Its "missing" lines are the known noise: root `scripts/__pycache__/check_updates.cpython-313.pyc`, backend `scripts/wait-for-services.py` (excluded without database and S3).
+
+**Packaging (step 5, `a480831`).** Root and backend `pyproject.toml` are PEP 621 with hatchling, one for one per worklist §3: both named `zigbee-control` as Poetry had them, `requires-python` `>=3.13,<4` at both levels, the root keeps `pathspec>=1,<2` beside `honcho` and `psutil` and its dev group `pytest>=8,<9` beside `ruff==0.11.13`, the backend keeps `kubernetes>=35.0.0,<36`, `PyYAML>=6.0` and `types-pyyaml>=6.0.12.20260906,<7`, and the PilotApp comment sits above the backend's `[build-system]`. `[tool.ruff] exclude` stays (step 6 makes it `extend-exclude`). Phase 11's lock method (pin lists in `/work/scratch/zc-uv/`): both locks equal `poetry.lock` package for package (root 10, backend 71; no `tomli`, the backend needs 3.13), and neither lock carries constraints. Both `poetry.lock` files are deleted. Also on uv: `.kubecoder/project.yaml` and its comments (CI is named as `uv run --no-sync run-suite`), root app-owned `scripts/regenerate-openapi.py` (already the template's script with `--frontend`; `uv run dev`, and its docstring's note copied from IoTSupport, about a database ZigbeeControl doesn't have, became the template's no-database line, so the file equals the template's render), `CLAUDE.md`, `backend/CLAUDE.md`, `backend/README.md`, `backend/.dockerignore`'s comment and `docs/slice-test-plan.md`. `.kubecoder/config.yaml` names no Poetry. Left: the frozen `backend/docs/features/cookie_auth/plan.md`. **Gate:** `uv lock --check` and `uv sync --locked` green at both levels; `uv run run-suite --help`, the root's `ruff check scripts tools` and the backend's `import app, run` work.
+
+**Arrived early:** step 7 (`container.py`), step 14 (`Dockerfile`), step 12's `package.json` lines and `pnpm install`, and the `vulture_whitelist.py` comment.
+
+**For the later chunks, by hand:**
+
+- Step 6: the pins in `backend/pyproject.toml` (spectree, flask-cors, the dev group with `watchdog[watchmedo]`; no `types-pillow` to drop), `extend-exclude`, `ruff==0.15.22` at the root, `uv lock`, `uv lock --upgrade-package mypy`, `ruff check --fix`.
+- Step 8: optional, nothing to mark.
+- Step 9: `tab_status_service.py` `send_event` sites (`BROADCAST_TARGET` and `Target.connection(request_id)`); step 10: `tests/services/test_tab_status_service.py`'s asserts and the test-session roles.
+- Step 11: `backend/.env.example` (the `.rej` showed the template's `STAGE`/`HOMELAB_INTERNAL`/`LOG_LEVEL`/`MAX_UPLOAD_SIZE_MB` and the `BASEURL` comment not taken).
+- Step 12: `pnpm update eslint-plugin-react-hooks ssegateway`. Step 13: `button.ts` by hand. Step 15: the OpenAPI refresh (`regenerate-openapi.py --frontend` is ready).
+- Step 16: the frontend `test` verb is `pnpm playwright test`, so the preview pass needs `uv run run-suite --suite frontend` (phase 13's note).
 
 ## Phases
 
