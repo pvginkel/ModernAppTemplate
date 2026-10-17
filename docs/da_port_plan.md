@@ -62,7 +62,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | done 2026-10-17 | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`, `d2f6ded`, `f9f9a5b`, `9bd07c9`; backend `b9ac732`, `57427d0`; parent `f38d2f8`, `101033b`, `096f326`, this entry |
 | 7 | Frontend: stages, SSE, defaults | done 2026-10-17 | frontend `ec93ae9`, `13a4c62`, `fcce4fd`, `98375e0`, `678a52a`; parent `2d351fe`, `323bd88`, this entry |
-| 8 | Root: CI, images, dev stack, architecture, tooling | todo | |
+| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: step 1 done | frontend `f308682`; parent `07fd094`, this entry |
 | 9 | Conventions guide and skill | todo | |
 | 10 | Release | todo | |
 | 11 | App: IoTSupport | todo | |
@@ -440,6 +440,58 @@ Frontend `ec93ae9` (FE19 and FE32, with the OpenAPI refresh and knip), `13a4c62`
   - **FieldnotesApp (15):** its FN-38 frontend edits conflict with FE16. They swap the inline `makeUniqueToken` for `@/lib/utils/random` and call `nameSseConnection` in `sse-worker.ts` and `sse-context-provider.tsx`, and `src/lib/api/sse-connection.ts` then adds `X-SSE-Request-Id` to API requests. Phase 15 drops them along with the backend binding (correction 10). If they were kept, the gate no longer holds screens back until the stream is named, so their fetches would go out without the header, and `tests/shell/sse-connection.spec.ts:57-60` would fail.
   - **PilotApp (16):** take the template's side of `8b8cf41` in `sse-worker.ts`, `sse-context-provider.tsx` and `playwright-binding.d.ts`. The bridge is renamed, and PilotApp's specs don't use it. Its `tests/infrastructure/sse/sse-connect-refusal.spec.ts` is not a template file, and copier leaves it alone. It opens a bare EventSource, so FE15 doesn't affect it, and its role cases are Pilot's own: keep it or drop it.
 - **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green. Lint's one warning, the unused `eslint-disable` in the SSE provider, predates phase 6. The Playwright suite at one worker passed 38 with 5 skipped (3,177 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (4,540 MB peak). Two edits to the fetch error's text came after `test` and the Playwright runs; `build`, whose frontend `pnpm run build` runs `check`, passed after them. The peaks are sampled from the modern-app container's cgroup each second, because `--output-mode full`, which prints the counts, drops the runner's peak line. Steps 1 and 2 ran the same gates green: Playwright at one worker passed 35 with 2 skipped (3,243 MB) after step 1, and 38 with 5 skipped (3,316 MB) after step 2, and the isolation spec at two workers passed first time (5,081 and 4,691 MB). Step 2's preview pass at one worker, with the two commands in `frontend/CLAUDE.md`, passed 43 with none skipped, and `root/test-app/frontend/dist` was rebuilt plain afterwards; before the `USE_SHARED_WORKER` fix it failed exactly the three SharedWorker cases, at the path check.
+
+### 2026-10-17, phase 8, step 1: CI
+
+Frontend `f308682` (the `@preview` tag); parent `07fd094` (the `Jenkinsfile`, the suite runner, the build-cache scripts, docs), this entry.
+
+- **`Jenkinsfile.jinja`** is PilotApp's declarative file (correction 2), with:
+  - the uv strings: `install: 'uv sync --locked --no-dev'`, `run: 'uv run --no-sync'`;
+  - `services:` holding `[name: 'postgres', image: 'postgres:18-trixie', env: [POSTGRES_PASSWORD: 'postgres']]` under `use_database` and today's RustFS sidecar under `use_s3`, and `services: []` with neither;
+  - `env:` holding `STAGE: 'tst'`, `BUILD_CACHE: 'true'` and, under `use_s3`, the four `S3_*` values (bucket `<project_name>-validation`);
+  - the comments: the wait for the services, the PostgreSQL sidecar, and ElectronicsInventory's S3 comment, word for word.
+
+  No `resources` on the postgres service. The header's first paragraph goes through Jinja's `wordwrap(97)`, which reproduces the hand-moved headers of PilotApp, FieldnotesApp, IoTSupport and ZigbeeControl exactly.
+- **Checks:**
+  - The controller's declarative linter (`pipeline-model-converter/validate`, with `JENKINS_TOKEN`) accepted three renders: the root test-app (database and S3), S3 only, and neither.
+  - Rendered with PilotApp's answers minus the database, the file differs from PilotApp's `Jenkinsfile` only in `env:`.
+  - `modernApp.test` stringifies every `env` value and counts a JUnit stem `frontend-*` under the `frontend` suite.
+  - No Jenkins run was possible.
+- **What each app's `Jenkinsfile` meets at its sync (phases 11–16).** The old render is the scripted file, so `copier update` conflicts across the file. Resolve to the app's file plus the template's new lines. Every app gains `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments. The four Poetry apps also move to the uv strings.
+  - **IoTSupport (11):** gains the postgres service. It keeps its `withVault` wrapper, the opensearch service, the Keycloak env and `secrets:`.
+  - **ElectronicsInventory (12):** gains the postgres service. It keeps the docs-image stage and its three-image header. Its S3 block already matches.
+  - **DHCPApp (13):** keeps `Job: Dnsmasq/DHCPApp` and its own header wrapping. Its pin key `dhcpapp_ui` is its answer, so it renders.
+  - **ZigbeeControl (14):** keeps its "No data sidecars" comment.
+  - **FieldnotesApp (15):** gains only the `env:` lines.
+  - **PilotApp (16):** gains the postgres service and the comments above `modernApp.test`.
+- **Build cache (RT05, correction 4).**
+  - **Switch and scripts:** `run-suite --build-cache` is on by default when `BUILD_CACHE=true`. `scripts/build-cache-get.sh` and `-put.sh` are template-owned copies of `HomelabAppsDeploy/jenkins/chart/scripts/`, byte for byte, run with `sh`.
+  - **Restore and upload:** the runner restores the pnpm store (`pnpm store path`, run in `frontend/`) before the install. It uploads after a miss, and only when the `--frozen-lockfile` install succeeded. A failed get or put is not a step result.
+  - **Key:** `pnpm-<sha256 of frontend/pnpm-lock.yaml>.tgz`, with one fixed prefix for every app. The tarball is relative to the store path (`…/v3` under pnpm 9).
+  - **Tested** against a local stand-in server (`BUILD_CACHE_URL`), not the real cache. A miss uploaded 58 MB for the root test-app; the next run restored it in 1 s and installed in 1 s.
+  - **For step 2:** the frontend `Dockerfile`'s restore must use the same key and the same pnpm major as the store it reads: `curl -sSf "${BUILD_CACHE_URL:-http://build-cache.jenkins-prd.svc.cluster.local}/pnpm-$(sha256sum pnpm-lock.yaml | cut -d' ' -f1).tgz" | tar -xzf - -C "$(pnpm store path)" || true`, after `COPY package.json pnpm-lock.yaml` and before `pnpm install`.
+- **The preview pass (correction 12): a second, preview-only pass, not DA's single preview run.**
+  - **Why:** DA's way would drop the dev-server path from CI, and from every local suite run too. That path is the one developers and `pnpm playwright test` use, and the one FE12's SSE proxy and the `?__sharedWorker` handling live on. A whole second pass would double Playwright time, against `modernApp.test`'s fixed 3,600 s deadline, for apps with large suites. So the second pass runs only the specs that need a production build, and the image build stays plain.
+  - **How it selects:** by a Playwright tag. The five SharedWorker cases carry `@preview` (frontend `f308682`): a `{ tag }` on the SharedWorker `describe` in `sse-auth-recovery.spec.ts`, and on the two tests in `sse-connectivity.spec.ts`. They keep their skip guard.
+  - **What the runner does:** after the dev-server pass, it lists `--grep @preview` within the selected specs (`--list --pass-with-no-tests`). If any are selected, it runs `VITE_TEST_MODE=true pnpm build`, then Playwright with `--grep @preview` and `PLAYWRIGHT_PREVIEW_MODE=true`, into `frontend-preview.xml`. It skips the pass when none are selected, as for the worker-isolation spec alone. It clears both variables for the plain build and the dev-server pass, and leaves `dist/` a test-mode build, which `.dockerignore` keeps out of the image.
+  - **Cost** in the root test-app: 16 s of build and 8 s of tests.
+  - **The JUnit report** lists the five twice: skipped in `frontend.xml`, passed in `frontend-preview.xml`.
+  - **Deviation:** the plan put the change in `local.py.jinja` alone; the tag is a frontend template change.
+  - **For phase 9 (RT13):** the convention is that a spec needing a production build skips without `PLAYWRIGHT_PREVIEW_MODE=true` and carries `@preview`. `frontend/CLAUDE.md`'s Playwright section says so.
+  - **For phases 11–16:** no app has its own spec that gates on `PLAYWRIGHT_PREVIEW_MODE` today. The template's SSE specs arrive tagged.
+- **Docs:** `docs/copier_approach.md` (the `Jenkinsfile` line and the build-cache scripts), `CLAUDE.md`'s `use_database` row, and `copier.yml`'s `use_database` help.
+- **For phase 10:** the changelog takes:
+  - the new `Jenkinsfile`, with the per-app resolutions above;
+  - `scripts/build-cache-*.sh`, `--build-cache` and `BUILD_CACHE`;
+  - the preview pass and the `@preview` tag;
+  - `STAGE=tst` in CI.
+- **Still open, for the operator or phase 9 (worklist §4.3):** after this step, JenkinsPipelineUtils' `docs/pages/types/modern-app.md`, which says files follow "the reference file below, not the template", and the jenkins-pipelines skill's "two files predate the guide" paragraph (KubeCoderConfig) are stale.
+- **Gates:**
+  - `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green.
+  - **Playwright through the runner at one worker:** 38 passed and 5 skipped on the dev server, then the preview pass passed 5 (runner peaks 3,254 and 1,297 MB; the cgroup peak was 3,536 MB).
+  - **`worker-isolation.spec.ts` alone at two workers:** passed first time (5,080 MB runner peak), and the preview pass was skipped.
+  - **One spec file** (`sse-connectivity.spec.ts`) ran both passes.
+  - **A CI-shaped run** (`STAGE=tst BUILD_CACHE=true`, `--output-mode full --junitxml-dir … --retries 2`, one worker, a fresh pnpm store and no `node_modules`): green, with `SUITE_RESULT` backend 9/0/0, frontend 38/0/5 and frontend-preview 5/0/0 (3,650 MB cgroup peak). So `STAGE=tst` changes no outcome of the domain or Playwright suites.
 
 ## Phases
 
