@@ -57,7 +57,7 @@ sse_gateway_port:
 use_database:
   type: bool
   default: true
-  help: "The backend uses PostgreSQL (postgres sidecar, database bootstrap in setup)"
+  help: "The backend uses PostgreSQL (postgres sidecar and database bootstrap in setup, postgres service in CI validation)"
 
 database_name:
   type: str

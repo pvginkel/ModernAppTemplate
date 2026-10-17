@@ -58,7 +58,7 @@ This repository runs in a KubeCoder environment.
 | `use_oidc` | OIDC authentication (BFF pattern with JWT cookies) | OIDC login/logout UI, token handling | (not used) |
 | `use_s3` | S3 storage, CAS endpoints, image processing | (not used in frontend) | S3 sidecar in the dev environment and the CI validation Job |
 | `use_sse` | Server-Sent Events via SSE Gateway | SSE client, real-time update components | SSE gateway in the dev stack |
-| `use_database` | SQLAlchemy, Alembic, migrations | (backend only) | Postgres sidecar and database bootstrap in setup |
+| `use_database` | SQLAlchemy, Alembic, migrations | (backend only) | Postgres sidecar and database bootstrap in setup; `postgres` service in the CI validation Job |
 
 ## Key Documentation
 
