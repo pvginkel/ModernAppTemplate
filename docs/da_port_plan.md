@@ -65,7 +65,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 8 | Root: CI, images, dev stack, architecture, tooling | done 2026-10-17 | frontend `f308682`, `b0b1b16`, `0b87bad`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, `2ea8724`, `33c6bae`, `2d5bfe8`, `13611f4`, this entry; DockerImages clone `7e7c1f7` (not pushed) |
 | 9 | Conventions guide and skill | done 2026-10-17 | parent `91f1de1`, `5374474`, this entry; DevGuides clone `92bc97d`; KubeCoderConfig clone `c5db31a`, `ec17ea5`; JenkinsPipelineUtils clone `01bf1fe` (none pushed) |
 | 10 | Release | done 2026-10-17 | backend `6976a35`; frontend `5a155fd`, `9828760`, `2ee64bf`; parent `590ca61`, `51d8daa`, `63e1773`, `8b43fc1`, this entry; tags backend `v0.14.0` (`6976a35`), frontend `v0.21.0` (`2ee64bf`), root `v0.2.0` (this entry's commit); none pushed |
-| 11 | App: IoTSupport | todo | |
+| 11 | App: IoTSupport | in progress: changelog steps 1–5 done | IoTSupport `c294800` (root), `c9a67d1` (backend), `21d9d26` (frontend), `c8d48fa` (uv); parent: this entry |
 | 12 | App: ElectronicsInventory | todo | |
 | 13 | App: DHCPApp | todo | |
 | 14 | App: ZigbeeControl | todo | |
@@ -698,6 +698,67 @@ Run in two chunks. Backend `6976a35`; frontend `5a155fd`, `9828760`, `2ee64bf`; 
 - **IoTSupport's `backend/scripts/wait-for-services.py` (phase 11).** IoT has its own copy (an OpenSearch wait, and S3 bucket creation), and the file is template-owned now. The template's `S3Service.startup()` creates the bucket, so only the OpenSearch wait lacks a home. Phase 11 settles it, as a standing edit listed in IoT's `CLAUDE.md` or as a template hook. If neither fits the rulings, it is a stop.
 - **The toast helpers (phase 12).** `dismissToast()`, `waitForToastsToDisappear()` and `expect*Toast()` now close toasts at EI's ~50 call sites (17 `dismissToast`, 33 `expect*Toast`), plus the three `waitForToastViewportDismissed()` calls. `expect*Toast()` closes the *first* toast, not necessarily the one it matched. That was always so, and it is only visible now. Run EI's suite, and look here first when a spec that touches toasts changes outcome.
 - **Phase 17:** push this repo's tags with it, `backend/`'s and `frontend/`'s with theirs.
+
+### 2026-10-17, phase 11, steps 1–5: IoTSupport sync and uv
+
+Changelog steps 1–5, one commit each in `/work/IoTSupport`: `c294800` root v0.2.0, `c9a67d1` backend v0.14.0, `21d9d26` frontend v0.21.0, `c8d48fa` Poetry to uv. Nothing pushed. The conflicts were the ones the tag check saw, and the rulings settled each.
+
+**Root.** Only `Jenkinsfile` conflicted. Resolved to IoT's file (the `withVault` wrapper, the opensearch service, the Keycloak env, `secrets:`) plus the `postgres` service (first in `services:`), `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments, and the uv `install`/`run` pair. The template's comment block above `modernApp.test` was not taken, since the changelog names it for PilotApp only. The root's app-owned files were left alone, as expected.
+
+**Backend.** App-owned files, resolved per step 3:
+
+- `app/services/container.py`: **step 7 landed exactly.** `lifecycle_coordinator` and `health_service` sit above `s3_service`, and `health_service=health_service` goes to `S3Service` and `SSEConnectionManager`. The merge also added a second `testing_service = providers.Factory(TestingService)`. I dropped it and kept IoT's `Singleton` (the template has used `Factory` all along, so the merge only exposed it). I reverted the template's reworded health-service comment.
+- `Dockerfile`: **step 14 landed.** Both conflict hunks were step 14's build stage and runtime `FROM`, so I finished the rewrite: the template's default, plus `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1` in the runtime `ENV`. The step's precondition still holds: DockerImages `7e7c1f7` must be pushed and the images rebuilt before CI builds it. `.dockerignore`'s comment now lists `uv.lock, *.py` (in the uv commit).
+- `app/app_config.py`: the app's own. **Step 8 is not landed.** The hunk brought `dump_for_logging` without the `Sensitive` marks, and with the method in place IoT's secrets (Keycloak admin secret, Wi-Fi and MQTT passwords, `secret_key`, `fernet_key`, the Elasticsearch password) would reach the boot log.
+- `pyproject.toml`: the app's own Poetry file in the backend commit, then converted in step 5. **Step 6 is not landed.** The merge produced a hybrid: the template's `[project]` without IoT's extra dependencies.
+- `tests/conftest.py`: the docstring hunk is dropped, and the OpenSearch pre-flight is added (below). Step 10 is untouched: `test_settings` and `test_app_settings` are still function-scoped and on SQLite.
+- `vulture_whitelist.py`: kept the hunk's `poetry run` → `uv run` comment.
+- `tests/test_smoke.py` (new, app-owned): kept. It is the template's liveness test.
+- `scripts/wait-for-services.py` (template-owned now): the template's file. `scripts/dev-server.sh` and `scripts/initialize-sqlite-database.sh` are deleted. One stale mention of the latter remains in IoT's own `frontend/docs/contribute/testing/playwright_developer_guide.md:72`, for step 16's upkeep.
+- Copier wrote `backend/.env.example.rej` (a rejected hunk on app-owned `.env.example`; gitignored by `.env*`), and `frontend/.env.example.rej` comes back on every frontend update. I deleted both. `.env.example` is unchanged and waits for step 11.
+
+**The OpenSearch wait: a `pytest_sessionstart` pre-flight in app-owned `backend/tests/conftest.py`.** No standing edit and no template change. It polls `ELASTICSEARCH_URL/_cluster/health?wait_for_status=yellow` for up to 180 s, which is IoT's old budget and logic, and calls `pytest.exit` when OpenSearch does not come up. It waits only when `STAGE == "tst"` (the Jenkinsfile's) and `ELASTICSEARCH_URL` is set (Jenkins env).
+
+- **CI:** the library's `modernApp.test` runs `run-suite`, which runs the template's `wait-for-services.py` (PostgreSQL, S3), then the backend pytest, where this hook waits, and Playwright after it. The backend tests never reach OpenSearch (`test_app_settings` points at `elasticsearch.test`), so the wait in practice serves the Playwright backend, which reads the sidecar.
+- **Local runs don't wait, as before.** The old script waited only when `S3_ENDPOINT_URL` was in the process env, which only CI sets. An ungated wait would now see `.env`'s `ELASTICSEARCH_URL=http://localhost:9200`, because `conftest_infrastructure` loads `.env` into `os.environ`. This environment has no opensearch sidecar, so the later chunks' backend runs here would stall for 180 s and then fail.
+- **Checked** against a fake health endpoint: with `STAGE=tst` the hook queries and passes; without it, it makes no request. The bucket creation needs no home, since `S3Service.startup()` creates it.
+
+**Frontend.**
+
+- `package.json` (app-owned): **step 12 landed.** It has `pg` and `@types/pg` `^8.23.1`, `generate:api:with-backend`, and the optional `build-fast`/`build` split, which I kept. The conflict sat at IoT's `split2`/`ssegateway`, and I kept both. I ran `pnpm install`, so `pnpm-lock.yaml` is in the commit.
+- `src/styles/button.ts`: **step 13 landed** (clean hunk).
+- `src/routes/index.tsx`: IoT's redirect to `/devices`.
+- `vite.config.ts`: the template's side of all four hunks (no `xfwd`; `forwardOrigin` and `configureSseProxy` replace it), with the esptool alias and `optimizeDeps` kept. Diffed against the frontend test-app's render, only those two blocks and the ports differ.
+- The violation finder reports no post-adoption drift in either component. Pre-existing divergence: backend `.gitignore` +4, frontend `.gitignore` +2 and `knip.config.ts` +2.
+
+**Packaging (step 5).**
+
+- The root and backend `pyproject.toml` are PEP 621 with hatchling, converted one for one per worklist §3: the same constraints, scripts and dev group, and the PilotApp comment above `[build-system]`.
+- `requires-python` stays `>=3.11,<4`, from `^3.11` (the template says `>=3.13,<4`; no step names it). The root project's name stays `iot-support`, the same as the backend's (the template renders `<project_name>-workspace`). Both are harmless; rename them if you want the template's shape.
+- **The lock method,** for EI, DHCPApp and ZigbeeControl:
+  1. Append every `poetry.lock` package as `name==version` to `[tool.uv] constraint-dependencies`.
+  2. Run `uv lock`.
+  3. Restore `pyproject.toml` and run `uv lock` again.
+
+  uv keeps the locked versions, so the final lock carries no constraints. The diff against `poetry.lock` is empty at the root. The backend adds only `tomli` (coverage, `python_full_version <= '3.11'`).
+- `poetry.lock` is deleted at both levels.
+- `.kubecoder/project.yaml` is on `uv sync --locked` and `uv run`. Its header comment says Jenkins runs `uv run --no-sync run-suite`, and the ruff comment says `uv run ruff`.
+- `scripts/regenerate-openapi.py` (root, app-owned) starts the backend with `uv run dev`. Copier leaves the root's app-owned files alone, so this was still `poetry run dev` and would have broken step 15.
+- `CLAUDE.md` says Python/uv and `uv run run-suite`. `backend/CLAUDE.md`, `backend/README.md` and `docs/slice-test-plan.md` are reworded too. No `poetry` mention is left outside the frozen `docs/features/`.
+
+**Gates.** `kc project setup` is green on uv. Root `uv run ruff check scripts tools` and backend vulture are green. Still red, and what fixes each:
+
+- Backend `uv run ruff check .`: I001 in template-owned `app/database.py` and `tests/test_database_schema.py`, from ruff 0.11.13 in the lock. **Step 6** (ruff 0.15): `uv run --with ruff==0.15.22 ruff check .` passes.
+- Backend `uv run mypy .`:
+  - `app/services/rotation_nudge_service.py:57` and `app/services/device_log_stream_service.py:298`, `send_event` without a `Target`: **step 9**.
+  - `app/config.py:81` (template-owned): `Incompatible types in assignment (expression has type "str", variable has type "Literal['local-dev', ...]")`. The template's `Stage.__init__` relies on narrowing by `value not in STAGES`, which mypy 1.20 does and IoT's locked mypy 1.19.1 doesn't (the template test-app locks 1.20.2; `uv run --with mypy==1.20.2 mypy .` clears it). **Step 6 doesn't fix it as written:** its pins leave `mypy>=1.8.0,<2`, and `uv lock` keeps 1.19.1. Step 6 needs `uv lock --upgrade-package mypy` (or a `mypy>=1.20` floor). Every app whose lock holds mypy < 1.20 will meet this. A changelog/template-pin gap for the orchestrator, not a stop.
+- Not run in this chunk: the backend and Playwright suites (step 10 still has to move `conftest.py` to PostgreSQL), and the frontend `pnpm check` (`tsc` fails until step 15's OpenAPI refresh).
+
+**For the next chunks.**
+
+- Already landed: steps 7, 12, 13, 14.
+- Still to do: steps 6, 8 (optional), 9, 10, 11, 15–18. Step 19 needs nothing.
+- Steps 6 and 9: see the gates above.
 
 ## Phases
 
