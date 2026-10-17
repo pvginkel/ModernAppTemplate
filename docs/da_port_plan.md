@@ -70,7 +70,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 13 | App: DHCPApp | done 2026-10-17 | DHCPApp `752e0a8` (root), `c57c73c` (backend), `446f9cd` (frontend), `d04ceb9` (uv), `ab9ebbf`, `3fa7ec1`, `3331d7a`, `ff80b81`, `41be6b9`, `214687b`, `78bb6e3`, `ec3597d` (root `CLAUDE.md`, found in phase 15); DnsmasqDeploy clone `ed61025` (not pushed); parent `c3bec09`, `e9ea80d`, `6d91d3c`, `abf711b`, this entry; none pushed |
 | 14 | App: ZigbeeControl | done 2026-10-17 | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv), `43baff0`, `9edbf7a`, `4f6295b`, `12dcfc0`, `6fea457`, `62289c5`, `b937119`, `fda3f8a`, `670761e`, `8659be5` (root `CLAUDE.md`, found in phase 15); Zigbee2mqttDeploy clone `a9fc082` (not pushed); parent `5451d57`, `37521f3`, `465d3eb`, `f8a9e5b`, this entry; none pushed |
 | 15 | App: FieldnotesApp | done 2026-10-17 | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`), `727420c` (step 9, readyz), `0a94aa0` (6), `9b58615` (8), `1c048d9` (9), `c38e92a` (11), `5d8aefd` (12), `ea59e3e` (13), `fd0be84` (10), `73ea077` (15), `914d02d` (15, `guessed`), `c330148` (upkeep, `CLAUDE.md`), `d7d7368` (upkeep, `conftest.py`); FieldnotesDeploy clone `4b7ac6a` (not pushed); parent `8449fc1`, `0d49fd4`, `3898196`, `8226f71`, `c0cebe9`, `d7b3fec`, this entry; none pushed |
-| 16 | App: PilotApp | in progress: steps 1–5 done | PilotApp `8f57f73` (root), `97923ff` (backend), `1f20820` (frontend), `09ab7ef` (step 5, `CLAUDE.md`); parent: the steps 1–5 entry; none pushed |
+| 16 | App: PilotApp | in progress: steps 1–9, 11–15 done | PilotApp `8f57f73` (root), `97923ff` (backend), `1f20820` (frontend), `09ab7ef` (step 5, `CLAUDE.md`), `e3bdbeb` (6), `7893544` (8), `f1c4a02` (9), `67113b3` (11), `168babe` (12), `6d25bc1` (13), `e1329ce` (15); parent: the steps 1–5 entry, the steps 6–9, 11–15 entry; none pushed |
 | 17 | The push | todo | |
 
 ## Phase log
@@ -1070,6 +1070,39 @@ Changelog steps 1–5 in `/work/PilotApp`, one commit per step. Nothing is pushe
 - **Step 6:** a database app running `ruff format --check` meets `scripts/init-dev-database.py` too.
 - **Step 12:** PilotApp's `package.json` is an unedited render, like DHCPApp's `button.ts`, so nothing arrives with the update.
 - **Steps 3 and 6:** the dev stack needs step 6's `watchdog[watchmedo]` before `Procfile.dev` can run the backend. The phase 15 log says so, but the checklist doesn't.
+
+### 2026-10-17, phase 16, steps 6–9, 11–15: app-owned edits and the OpenAPI cache
+
+Changelog steps 6–9, 11–13 and 15 in `/work/PilotApp`, one commit per step; 7 and 14 checked. Nothing is pushed. No template change was needed, and no template-owned file was edited.
+
+- **6 (`e3bdbeb`):** `backend/pyproject.toml` takes the merge's pins by hand (spectree 2.0.3, flask-cors 6.0.5, ruff 0.15.22, pytest 9.1.1, pytest-cov 7.1.0, types-flask-cors 6, `watchdog[watchmedo]` 6.0.0) and `extend-exclude`; the root pins `ruff==0.15.22`. mypy was already 1.20.2 in the lock. Both `pyproject.toml` files now equal the render but for the backend's `[tool.ruff.format] exclude`, which gains the five template-owned files 0.15 would reformat: `testing_guard.py`, `health_service.py`, `http_metrics.py`, `log_formatter.py` and `scripts/init-dev-database.py`. No app-owned file needed formatting. `ruff check --fix` changed nothing: the two template-owned I001s are gone under 0.15, and there is no `str, Enum`.
+- **7 and 14:** arrived in step 3. `container.py` passes `health_service=health_service` to `SSEConnectionManager`, below `lifecycle_coordinator` and `health_service`. The backend `Dockerfile` equals the render, on `modern-app-backend-build` and `modern-app-backend`.
+- **8 (`7893544`), taken:** `dump_for_logging()` and the template's docstring, as in FieldnotesApp. `AppSettings` has no fields, so the dump is empty.
+- **9 (`f1c4a02`):** Pilot has no `send_event`, `start_task` or readyz registration of its own (every hit is template-owned), and `.kubecoder/` reads no readyz body. `docs/slice-test-plan.md` did, twice: the dev stack's check now expects `"status": "ok"` with both checks `ok`, and the deployed check says a `200` alone is not enough, since a missing gateway gives `200` `"degraded"`.
+- **11 (`67113b3`):** `backend/.env.example` was an unedited render, so it now equals the render with Pilot's answers (the four settings, BASEURL's comment). No doc says the `redirect` is checked against `BASEURL`. `docs/slice-test-plan.md`'s sign-in check said the login route builds its redirect "from configuration alone"; it now adds the origin the request came in on.
+- **12 (`168babe`):** `package.json` now equals the render (`pg`, `@types/pg`, `generate:api:with-backend`, the `build-fast`/`build` split) but for `eslint-plugin-react-hooks` at `^7.1.1`. `pnpm install` added only `pg` and `@types/pg`. `pnpm update` found the lock already on react-hooks 7.1.1 and SSEGateway `3f6199d`; its re-sort was undone. eslint reports no error, only a warning for the unused `react-hooks/rules-of-hooks` disable in `tests/support/fixtures.ts`. That file is app-owned and equals the render, and the template's own test-apps show the same warning.
+- **13 (`6d25bc1`):** `whitespace-nowrap` by hand; `button.ts` equals the render.
+- **15 (`e1329ce`):** `kc project setup` first, because the `modern-app` container had restarted. The `pilot` database existed and had no revision to apply. Then `python3 scripts/regenerate-openapi.py --frontend` in the modern-app container. The cache gains `/api/ui-setup` with `UiSetupResponseSchema`, `ReadyzResponse` with its check schema, and `x-auth-roles.hierarchy`. `ForceSSECallbackErrorQuerySchema` takes the template's hash. The auth, SSE callback, testing and readyz operations change. There is no `x-auth-roles.read` warning, because Pilot's read role is `editor`. `tsc` is clean after `generate:api:build` and `generate:routes`, with no app code to change.
+
+**Gates.** `uv lock --check` and `uv sync --locked` are green at the root (5 packages) and in `backend/` (71 resolved, 70 installed). `kc project build` is green (`pnpm build`: generators, vite, `verify:build`, `pnpm check`). `kc project lint` is green but for `arch-validate`, which fails only because this environment has no `aac-tools` tool (`cexec: tool "aac-tools" is not available`). Root ruff, backend `ruff check`, `ruff format --check`, mypy (78 files) and vulture, and frontend `pnpm check` (eslint, `tsc`, knip) all pass.
+
+**First backend suite run** (`uv run pytest`, 29 tests, all Pilot's own): 23 passed, 6 failed, all in `tests/test_editor_gate.py` and all caused by the release's behaviour changes, not by this chunk's edits:
+
+- `TestTestingSessions::test_session_with_editor_is_served` and `TestOidcTokens::test_token_with_the_clients_editor_role_is_served`: the task read answers 404, not 200. The `task_id`/`oidc_task_id` fixtures start the task as no one (or as another subject) and read it as `someone`. Tasks now answer only their owner (step 10's "start a task as one subject and call `/api/tasks/*` as another").
+- `TestOidcTokens::test_token_without_editor_is_refused[no-roles, no-client-role, another-clients-editor, realm-admin]`: `/api/auth/self` with a bearer header answers 401, not 403. `/api/auth/self` no longer accepts a bearer token (tolerant mode reads the cookie only).
+
+**For the next chunk (step 10 and the upkeep).**
+
+- Fix the six above in `test_editor_gate.py`: tasks started by the subject that reads them, and `/api/auth/self` asserted 401 under a bearer token (or carried by the cookie). Then green twice and once in reverse order.
+- `kc project setup` is done since the `modern-app` restart; re-run it if `kc env describe` reports another.
+- Playwright's global setup can now import `pg`. `tests/infrastructure/sse/sse-connect-refusal.spec.ts` (kept in step 4) has not run yet.
+- Upkeep: vulture and knip pass with no change. The phase 16 hand-off section for slice 002 is still owed.
+
+**Checklist gaps** (not folded into the changelog):
+
+- **Steps 11 and 12:** where an app-owned file is an unedited render (`.env.example`, `package.json`), copying the fresh render with the app's answers is the whole step, but for `pnpm update`'s specifier.
+- **Step 11:** besides "validated against `BASEURL`", a doc can say that the login's `redirect_uri` comes from configuration alone (Pilot's `docs/slice-test-plan.md`).
+- **Step 10:** the bearer-header 401 on `/api/auth/self` is in "Auth" but not in step 10's list; Pilot's `test_editor_gate.py` asserted 403 through a bearer token.
 
 ## Phases
 
