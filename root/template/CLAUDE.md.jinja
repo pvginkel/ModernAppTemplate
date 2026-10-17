@@ -5,7 +5,8 @@
 ## Repo structure
 
 - **Root** — the `run-suite` orchestrator (`tools/suite_runner/`, CI's single entry point), the
-  shared `Procfile.dev` dev stack and its `scripts/dev.py` launcher, and the `Jenkinsfile`.
+  shared `Procfile.dev` dev stack and its `scripts/dev.py` launcher, the `Jenkinsfile`, and the
+  `Jenkinsfile.architecture` that publishes the architecture model in `docs/architecture/`.
 - **`backend/`** — the Flask API (Python, uv).
 - **`frontend/`** — the React + Vite SPA (TypeScript, pnpm) with TanStack Router/Query, an
   OpenAPI-generated client, and a Playwright E2E suite that boots the backend per worker.
@@ -39,3 +40,32 @@ template-owned file to add app behaviour; use the extension points instead:
 | Sidecars CI must wait for | `backend/scripts/wait-for-services.py` (the suite runner calls it) |
 
 If the template lacks an extension point you need, add it to the template first.
+
+## Architecture model
+
+{{ repo_name }} is a producer in the estate's federated architecture model. Its model is
+hand-authored in `docs/architecture/*.yaml`. `Jenkinsfile.architecture`, the job
+`AaC/{{ repo_name }}`, validates it against the architecture service on every push and archives it
+for AaC/Architecture to collect; `kc project lint` validates it too (`arch-validate`, in the
+`aac-tools` sidecar).
+
+The model is kept current centrally, not from here: the central architecture update in
+`pvginkel/Architecture` (`tooling/fleet.py update`) reads the commits since the model last changed
+and commits what they change in it. Nothing needs to run here after a change.
+
+**While `docs/architecture/` holds no model, nudge the operator to seed it.** A new app starts
+without one, and the AaC job has nothing to validate until it exists. In order:
+
+1. Seed the model with the `/seed-architecture` skill. It is not installed here: it comes with the
+   kit that `python3 tooling/fleet.py stage {{ repo_name }}`, run in the Architecture repo, stages
+   into a clone of this repo. It is interactive (the operator triages the candidate elements), so it
+   runs in a session of its own.
+2. Commit and push the model.
+3. The operator creates the job `AaC/{{ repo_name }}` through the Jenkins API, from the pipeline
+   guide's `config.xml` template (Script Path `Jenkinsfile.architecture`), and registers the
+   producer in Architecture's `pipeline-producers.yaml` (`repo: {{ github_owner }}/{{ repo_name }}`,
+   `jenkinsJob: AaC/{{ repo_name }}`).
+
+`Jenkinsfile.architecture` is the app's own, and `copier update` leaves it alone. A repo with a
+backend and a frontend model validates each in a stage of its own (the pipeline guide's app
+architecture type); the lint step in `.kubecoder/project.yaml` then names both.

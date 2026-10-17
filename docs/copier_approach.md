@@ -82,11 +82,12 @@ Template-owned (updated by `copier update`):
 
 Generated once (`_skip_if_exists`):
 - `pyproject.toml` — root uv project with honcho, psutil, pinned ruff and `[tool.ruff]`
-- `CLAUDE.md` — skeleton with a template-ownership table
+- `CLAUDE.md` — skeleton with a template-ownership table, and the architecture model's section: how a new app seeds its model and gets its `AaC/<repo_name>` job
+- `Jenkinsfile.architecture` — the architecture producer, on the pipeline guide's app-architecture type: `architectureProducer.validate` and `.archive` of `docs/architecture/*.yaml` in the `aac-tools` container. App-owned because the model's layout is: four apps have a backend and a frontend model, in two stages. The template ships no model; `/seed-architecture` writes the first one
 - `<repo_name>.code-workspace`
 - `scripts/regenerate-openapi.py`
-- `.kubecoder/config.yaml`
-- `.kubecoder/project.yaml`
+- `.kubecoder/config.yaml` — with the `aac-tools` toolchain for `arch-validate`
+- `.kubecoder/project.yaml` — the root's `lint` runs `arch-validate` on `docs/architecture/*.yaml`, and skips it while there is no model
 
 Hook: the suite runner runs `backend/scripts/wait-for-services.py` (under the backend's uv venv) after the backend install when that file exists — for CI sidecars that are slow to come up.
 

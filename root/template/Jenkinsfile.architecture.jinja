@@ -1,0 +1,46 @@
+{% set summary = "Validates " ~ repo_name ~ "'s hand-authored architecture model, docs/architecture/*.yaml, against the architecture service, and archives it as the producer's artifact, which AaC/Architecture collects." %}
+// {{ summary | wordwrap(97, break_on_hyphens=False, wrapstring="\n// ") }}
+//
+// Controller config:
+//   - Job: AaC/{{ repo_name }}
+//   - SCM: {{ github_owner }}/{{ repo_name }}, branch main
+//   - Script Path: Jenkinsfile.architecture
+
+library identifier: 'JenkinsPipelineUtils', changelog: false
+
+pipeline {
+    agent {
+        kubernetes {
+            inheritFrom 'jenkins-agent'
+            yaml podYaml(templates: ['aac-tools'])
+        }
+    }
+
+    options {
+        disableConcurrentBuilds(abortPrevious: true)
+        skipDefaultCheckout()
+        timeout(time: 60, unit: 'MINUTES')
+        timestamps()
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Validate architecture') {
+            steps {
+                script {
+                    architectureProducer.validate(files: ['docs/architecture/*.yaml'])
+                    architectureProducer.archive(files: ['docs/architecture/*.yaml'])
+                }
+            }
+        }
+    }
+}

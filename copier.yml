@@ -105,6 +105,9 @@ frontend_image_pin_key:
 _skip_if_exists:
   - "pyproject.toml"
   - "CLAUDE.md"
+  # The architecture model's layout is the app's: a monorepo with a backend and
+  # a frontend model validates each in a stage of its own.
+  - "Jenkinsfile.architecture"
   - "*.code-workspace"
   - "scripts/regenerate-openapi.py"
   - ".kubecoder/config.yaml"

@@ -38,6 +38,9 @@ capabilities:
 
 tools:
   - use: modern-app
+  # arch-validate, for the architecture model's lint step (project.yaml); the
+  # AaC/{{ repo_name }} job runs the same command.
+  - use: aac-tools
 {% if use_database or use_s3 %}
 
 services:
