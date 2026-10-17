@@ -55,7 +55,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | # | Phase | Status | Commits |
 |---|---|---|---|
 | 0 | Dedup and facts | done 2026-10-17 | parent `7cb4426` |
-| 1 | uv everywhere, dependency bumps | todo | |
+| 1 | uv everywhere, dependency bumps | done 2026-10-17 | backend `5cbec2a`, `7353261`; frontend `f3dfb72`; parent `7b06a55`, `23459f1` |
 | 2 | Backend: PostgreSQL testing | todo | |
 | 3 | Backend: fixes, stages, internals fact | todo | |
 | 4 | Backend: auth | todo | |
@@ -90,6 +90,31 @@ Record the stop in the phase log, and leave the phase `blocked`.
 - **Open for the operator:** D2 lockouts in IoTSupport, DHCPApp and ZigbeeControl; `HOMELAB_INTERNAL` on the public hosts; D8's means; PilotApp slice 002; MAT-12. None blocks phases 1–10.
 - **Read-only clones in `/work/scratch/`,** untouched: `JenkinsPipelineUtils`, `DockerImages`, `HomelabAppsDeploy`, `DevGuides`, `KubeCoderConfig`, `Architecture`, and the six deploy repos under `deploy/`. Phases 8, 9 and 11–16 can commit in them. Pull each one first.
 - **kubectl:** this environment has no `iac` tool container, so no `kubectl`. Phase 17 watches Argo CD syncs, so add `iac` to `.kubecoder/config.yaml` before it and use `cexec iac kubectl --context prd …`.
+
+### 2026-10-17, phase 1: uv everywhere, dependency bumps
+
+- **The copier command for syncing an app,** run from the component's directory (`/work/<App>`, `backend/`, `frontend/`):
+
+  ```bash
+  cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+  ```
+
+  Verified on a scratch clone of IoTSupport: run from its `backend/`, a directory with its own Poetry `pyproject.toml`, it updated v0.13.2 to v0.13.3. `CLAUDE.md`, `change_workflow.md` and `downstream_sync_process.md` carry it.
+- **copier** is pinned `==9.11.3` in `backend/pyproject.toml`, the backend repo's own uv project. The frontend repo and this repo no longer have a Python project: `frontend/regen.sh` runs `uv run --project ../backend --locked copier`. The apps' own dev groups still list `copier>=9,<10` (9.19.1 today), which no sync uses.
+- **Gate commands:** `kc project build|test|lint` are unchanged and run `uv run` underneath. Playwright, by hand:
+  - `cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite frontend --frontend-args="--workers=1"'`. At the default 2 workers the full run took the modern-app container down (`cexec: could not reach the modern-app tool (EOF)`).
+  - `worker-isolation.spec.ts` assumes two backends. At 1 worker it failed in one of two runs. Run it alone at 2 workers as well: `… run-suite --suite frontend --frontend-args="tests/e2e/parallel/worker-isolation.spec.ts"`.
+- **Bumps (BE-C08), ruled majors only:** spectree 2.0.3, flask-cors 6.0.5, Pillow 12.3.0, pytest 9.1.1, pytest-cov 7.1.0, ruff 0.15.22, types-flask-cors 6; types-pillow dropped. Newer majors exist (spectree 3, Pillow 13, ruff 0.17) and were not taken. Spectree 2 and flask-cors 6 needed no code change. pytest 9 needed no `pythonpath`. Ruff 0.15 re-sorted `alembic.config`/`alembic.script` in `database.py`, as in DA. The root template pins `ruff==0.15.22`.
+- **For phases 11–16 (app-owned, by hand):**
+  - `backend/pyproject.toml`: `spectree>=2.0.0,<3`, `flask-cors>=6.0.0,<7`, `pillow>=12.0.0,<13` (S3 apps), `ruff>=0.15.0,<0.16`, `pytest>=9.0.0,<10`, `pytest-cov>=7.0.0,<8`, `types-flask-cors>=6.0.0,<7`; drop `types-pillow`.
+  - Root `pyproject.toml`: `ruff==0.15.22`.
+  - Ruff 0.15 may re-sort imports in app-owned files (`uv run ruff check --fix`). The Pillow typing fix arrives with `copier update`; app-owned code that reassigns `img = img.convert(...)` needs the same change.
+  - The template's `project.yaml.jinja` runs `uv sync` without `--locked`, because a new app has no `uv.lock` until its first setup. The existing apps' `project.yaml` is app-owned, so PilotApp's `--locked` form is fine for them.
+- **Deferred:**
+  - The changelog entries: phase 10 writes them. The migration steps are worklist §3 "App-owned packaging" plus the bump list above.
+  - `Jenkinsfile.jinja` only swapped its install and run lines; phase 8 replaces the file.
+  - `CLAUDE.md` (the downstream-apps table) and `downstream_sync_process.md` (the sync-status rows) still call FieldnotesApp and PilotApp "on uv, not Poetry". The FieldnotesApp row also says to move the template to uv at its first sync. Phases 15 and 16 rewrite those rows.
+- **Small choices:** `regen.sh` (backend, root) exports `UV_LINK_MODE=copy`, and the backend repo sets `link-mode = "copy"`, because the sidecar's uv cache and `/work` are different mounts. `scripts/test_all.py` runs `uv sync` without `--locked`, so a stale lock is re-locked, as Poetry's retry did.
 
 ## Phases
 
