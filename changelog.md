@@ -63,6 +63,9 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
    - The comments in IoT's and EI's `.kubecoder/config.yaml` that say readyz reports `database.connected` now mean `checks.database.status`.
 10. **`backend/tests/conftest.py` and the app's tests.**
     - The database apps' tests now run on PostgreSQL, through the template's fixtures. Overrides of `test_settings` and `test_app_settings` become `scope="session"` (`tmp_path_factory`, no `database_url="sqlite..."`). `template_connection` is gone: rebuild on `run_databases.clone()` or `committed_app`. Writes through `db.session` move to the `session` fixture (EI's `test_database_constraints.py`). Literal sequence IDs in asserts fail (EI). Tests that leave in-memory state on the session app undo it. Tests that build services with their own metrics request `clear_prometheus_registry`. The schema drift test must pass, so models and revisions must match (EI's `with_variant(..., "sqlite")` columns).
+    - The test template database runs the app's `post_migration_hook`, so seed data it inserts (EI's 100 part types) is present in every test, where the SQLite database was empty: tests that assume an empty table clear it inside their own transaction (EI's `without_seeded_types` fixture).
+    - PostgreSQL enforces column lengths, which SQLite ignored: test data longer than its column fails (EI's part keys).
+    - Tests that add routes to an app need an app of their own: Flask refuses new routes on the session app once it has served a request.
     - Test sessions (the testing endpoints' fake sign-in) must hold one of the app's roles, `editor` for most: a session with none gets 403 everywhere, `/api/auth/self` included.
     - EI's and IoT's `StubLifecycleCoordinator` (`tests/testing_utils.py`) gains `unregister_lifecycle_notification`.
     - Tests that assert the old call shapes change: `send_event`'s first argument is a `Target` (`== BROADCAST_TARGET`, not `is None`); readyz bodies (FieldnotesApp `json()["checks"]["store"]`, and `health_service.clear_cache()` between a passing and a failing check); a version event read on connect without queueing one first now gets none in a local stage; `Settings(flask_env="production")` gives `stage == "prd"` and no exception text in a 500.
@@ -182,6 +185,7 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
 - Readyz has the new body, and can answer 200 `degraded`.
 - Unmatched requests are labelled `endpoint="unknown"` in the request metrics.
 - The task endpoints answer 404 to anyone but the task's owner, with the error envelope as the body.
+- A request that fails schema validation gets its errors as a JSON list in the 400 body; under spectree 1.x they came as one JSON-encoded string. Tests that substring-matched the old body change (EI's seller tests).
 - Playwright: the toast helpers really close toasts (EI calls them at about 50 sites), the two SharedWorker specs skip in the dev-server pass and run in the preview pass, and video is off by default.
 
 **Migration steps:** sync step 16. A test that changes outcome at the sync starts here.
