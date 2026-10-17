@@ -14,7 +14,7 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
 
 ### Syncing an app to this release
 
-**What changed:** everything in the sections below. `copier update` brings the template-owned files. The steps after it are app-owned edits, which copier does not make. (EI = ElectronicsInventory, IoT = IoTSupport. The database apps are EI, IoT and PilotApp; the S3 apps EI and IoT; the Poetry apps EI, IoT, DHCPApp and ZigbeeControl.)
+**What changed:** everything in the sections below. `copier update` brings the template-owned files; steps 5–19 are the app-owned edits. In `backend/` and `frontend/` the update three-way merges the app-owned (`_skip_if_exists`) files too, wherever their template render changed, so some of those edits arrive as hunks or conflicts; at the root it leaves them alone. (EI = ElectronicsInventory, IoT = IoTSupport. The database apps are EI, IoT and PilotApp; the S3 apps EI and IoT; the Poetry apps EI, IoT, DHCPApp and ZigbeeControl.)
 
 **Migration steps:**
 
@@ -33,11 +33,13 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
      - PilotApp: add the `postgres` service and the comments above `modernApp.test`.
    - `Jenkinsfile.architecture` is app-owned (`_skip_if_exists`), so copier leaves every app's file alone.
 3. **Backend `copier update`.** Commit. The update deletes `scripts/dev-server.sh` and `scripts/initialize-sqlite-database.sh`.
+   - App-owned files get merged as well. IoT, the release's trial run, conflicts in `Dockerfile`, `app/app_config.py`, `app/services/container.py` and `pyproject.toml`, and takes clean hunks into `tests/conftest.py` and `vulture_whitelist.py`. Resolve an app-owned file to the app's own content, keeping only what steps 5–15 name for it (they say what the file must end with, whatever a hunk brought). Check `git diff` on the app-owned files before committing, since a clean hunk raises nothing.
    - FieldnotesApp and PilotApp: where their own uv edits to template-owned files differ from the template, take the template's. Then drop uv, `scripts/dev-server.sh` and any other edit the template now covers from their `CLAUDE.md`'s list of standing template edits.
    - IoT: its own `scripts/wait-for-services.py` (OpenSearch wait, S3 bucket creation) meets the template's, which is template-owned now. Settle where the OpenSearch wait and the bucket creation go before resolving.
    - FieldnotesApp: `app/api/oidc_hooks.py` and `app/services/sse_connection_manager.py` conflict. Drop the FN-38 binding (`bind_unbound_identity`, the `X-SSE-Request-Id` binding, `tests/test_sse_identity.py`), and with it its `authenticate()` copy of the old hook body. An old body kept by mistake fails at its first request, because `throw_on_error` is now required.
    - PilotApp: take the template's side of `3f84260` in `app/api/sse.py`, `app/services/testing_service.py`, `app/api/testing_auth.py` and `app/schemas/testing_auth.py`. The SSE force-callback-error hook now lives in `api/testing_sse.py`, at the same URL.
 4. **Frontend `copier update`.** Commit.
+   - App-owned files get merged here too (IoT: `package.json` and `src/routes/index.tsx` conflict). Resolve them as in step 3, and keep the app's own `src/routes/index.tsx`, not the template's placeholder.
    - IoT: drop `xfwd: true` from the `vite.config.ts` proxies. On `/api` it puts `https,http` in `X-Forwarded-Proto` and breaks the dev login's redirect URI. Keep the esptool alias and `optimizeDeps`.
    - FieldnotesApp: drop its FN-38 edits to `sse-worker.ts` and `sse-context-provider.tsx`, and the `X-SSE-Request-Id` header in `src/lib/api/sse-connection.ts`.
    - PilotApp: take the template's side of `8b8cf41` in `sse-worker.ts`, `sse-context-provider.tsx` and `playwright-binding.d.ts`.
