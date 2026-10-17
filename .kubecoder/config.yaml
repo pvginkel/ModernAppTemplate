@@ -24,6 +24,8 @@ repos:
     path: ZigbeeControl
   - url: https://github.com/pvginkel/FieldnotesApp
     path: FieldnotesApp
+  - url: https://github.com/pvginkel/PilotApp
+    path: PilotApp
 
 capabilities:
   github: rw

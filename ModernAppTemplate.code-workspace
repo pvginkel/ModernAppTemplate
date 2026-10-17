@@ -24,6 +24,9 @@
     {
       "path": "../FieldnotesApp",
     },
+    {
+      "path": "../PilotApp",
+    },
   ],
   "settings": {
     "files.exclude": {
