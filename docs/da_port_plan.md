@@ -65,7 +65,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 8 | Root: CI, images, dev stack, architecture, tooling | done 2026-10-17 | frontend `f308682`, `b0b1b16`, `0b87bad`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, `2ea8724`, `33c6bae`, `2d5bfe8`, `13611f4`, this entry; DockerImages clone `7e7c1f7` (not pushed) |
 | 9 | Conventions guide and skill | done 2026-10-17 | parent `91f1de1`, `5374474`, this entry; DevGuides clone `92bc97d`; KubeCoderConfig clone `c5db31a`, `ec17ea5`; JenkinsPipelineUtils clone `01bf1fe` (none pushed) |
 | 10 | Release | done 2026-10-17 | backend `6976a35`; frontend `5a155fd`, `9828760`, `2ee64bf`; parent `590ca61`, `51d8daa`, `63e1773`, `8b43fc1`, this entry; tags backend `v0.14.0` (`6976a35`), frontend `v0.21.0` (`2ee64bf`), root `v0.2.0` (this entry's commit); none pushed |
-| 11 | App: IoTSupport | in progress: changelog steps 1–5 done | IoTSupport `c294800` (root), `c9a67d1` (backend), `21d9d26` (frontend), `c8d48fa` (uv); parent: this entry |
+| 11 | App: IoTSupport | in progress: changelog steps 1–9 and 11–15 done | IoTSupport `c294800` (root), `c9a67d1` (backend), `21d9d26` (frontend), `c8d48fa` (uv), `a8644f4`, `7481d05`, `db2a3cb`, `49cc3a2`, `6a414da`, `600b8f6`, `b8d3bef`, `b5011b7`, `3efd106`, `e227d07`, `394dde4`, `71d78ea`; parent `3341c75`, this entry |
 | 12 | App: ElectronicsInventory | todo | |
 | 13 | App: DHCPApp | todo | |
 | 14 | App: ZigbeeControl | todo | |
@@ -759,6 +759,43 @@ Changelog steps 1–5, one commit each in `/work/IoTSupport`: `c294800` root v0.
 - Already landed: steps 7, 12, 13, 14.
 - Still to do: steps 6, 8 (optional), 9, 10, 11, 15–18. Step 19 needs nothing.
 - Steps 6 and 9: see the gates above.
+
+### 2026-10-17, phase 11, steps 6–15: IoTSupport app-owned edits
+
+Changelog steps 6–9 and 11–15 in `/work/IoTSupport`, nothing pushed: `a8644f4` (6), `7481d05` (8), `db2a3cb`, `49cc3a2`, `6a414da`, `600b8f6`, `b8d3bef` (9), `b5011b7` (11), `3efd106` (15, the OpenAPI cache on its own), then `e227d07`, `394dde4` and `71d78ea` (the frontend gate fixes below). Steps 7, 12, 13 and 14 were verified against the steps, not redone: `container.py` matches `test-app-domain`'s wiring, `package.json` has `pg`, `@types/pg` and `generate:api:with-backend` in the right sections, `button.ts` has `whitespace-nowrap` in both, and the `Dockerfile` differs from the backend test-app's render only in its port and the two `PYTHON*` env lines.
+
+**Step 6.** The pins as listed; `uv lock` in both projects, then `uv lock --upgrade-package mypy` (1.19.1 → 1.20.2), which cleared `app/config.py:81`. `ruff check --fix` under 0.15.22 changed nothing: the I001s the previous chunk saw came from ruff 0.11 and don't fire under 0.15. Pillow 12 needed nothing, since IoT's five `.convert()` sites already annotate `processed: Image.Image`.
+
+**Step 8: taken.** `AppSettings` has `dump_for_logging()`. Marked `Sensitive`: `mqtt_password`, `keycloak_admin_client_secret`, `wifi_password`, `elasticsearch_password`, `fernet_key`, and `architecture_pipeline_trigger_url`, a Jenkins webhook URL whose token is a secret. Checked by loading the settings with all six set: each dumps as `***`. `secret_key` is the template's `Settings` field, marked already.
+
+**Step 9.**
+
+- `send_event`: `device_log_stream_service.py` sends `Target.connection(request_id)`, and `rotation_nudge_service.py` sends `BROADCAST_TARGET`. The rotation nudge is app-wide dashboard state, so broadcast keeps its behaviour. The two test files' asserts moved with it (`== BROADCAST_TARGET`, `== Target.connection("req-1")`), so the test chunk need not touch them. They pass with `--noconftest` and the stub's missing method added temporarily (31 tests).
+- `ExternalServiceException`: IoT's class in `app/exceptions.py` and its 502 handler in `startup.py` are deleted. Seven app modules and five test modules import it from `app.core_exceptions`, then ruff re-sorted the imports. `pytest --noconftest --collect-only` collects all 716 tests with no import error.
+- `coredump_service.py`: `_update_parse_status` runs in `scoped_session(...)`. A new `_require_container()` holds the container check that `_get_session()` had.
+- `.kubecoder/config.yaml`: the postgres comment says readyz reports `checks.database.status`, and that both suites run on the sidecar. That describes step 10's end state. IoT's `docs/slice-test-plan.md:90` read the old readyz body too (`database.connected`, `sse_gateway.reachable`), and it now reads the `checks.*.status` form (`b8d3bef`).
+
+**Step 11.** `backend/.env.example` gains the four settings in the template's words and places. IoT's 50 MB nginx limit matches the default.
+
+**Step 15.** `python3 scripts/regenerate-openapi.py --frontend` at the root ran in `modern-app` against the dev database. The cache gains `/api/ui-setup`, `/api/testing/sse/force-callback-error`, the readyz schemas and `x-auth-roles.hierarchy`, plus `/api/pipeline/fleet-projection`, which the old cache lacked. No component schema's `required` list changed. The generator's "`x-auth-roles.read` not found; skipping role generation" warning predates the sync (`read` was `null` before too).
+
+**The frontend gates needed two app-side fixes, from gaps in the release, not template bugs:**
+
+- **ESLint: `eslint-plugin-react-hooks` 7.0.1 vs 7.1.1.** Template-owned `src/contexts/sse-context-provider.tsx:441` (`createSharedWorkerConnection()` in the mount effect) fails `react-hooks/set-state-in-effect` under 7.0.1, which IoT's lock held before and after the sync. It passes under 7.1.1, which the frontend test-app locks. The template's `package.json` still says `^7.0.1`, so `pnpm install` keeps an app on 7.0.x. Fix: `pnpm update eslint-plugin-react-hooks`, which wrote `^7.1.1`. 7.1.1 flags app code in turn: in IoT, `use-device-logs.ts:192`'s reset on device change got a reasoned disable directive, in the codebase's existing style. **For the orchestrator:** step 12 should say to run it, and the template's floor could be `^7.1.1`. Every app whose lock holds 7.0.x will hit this.
+- **`tsc`: FE07's `--default-non-nullable false`.** The changelog's "What changed" names it, but no migration step does. After the refresh, 13 errors in 4 hooks and 2 test factories, all from inline API shapes declaring a defaulted response property (`device_name`, `firmware_version`, `parsed_at`, `console_url`, `last_rotation_completed_at`, …) as always present. Fix: those properties become `?:`, and the transforms map a missing one with `?? null`. **For the orchestrator:** step 15 could say to expect this.
+- `71d78ea` drops a pre-existing unused disable directive in `device-logs-download-dialog.tsx`, the only ESLint warning.
+
+**Gates.** All green in IoTSupport: `kc project lint` root, backend and frontend (backend `ruff check .`, `mypy .` over 184 files, vulture; frontend `pnpm check`: eslint, tsc, knip), and `pnpm run build` (exit 0). The backend and Playwright suites were not run.
+
+**For the test chunk (step 10).**
+
+- Every test using the `app` fixture fails at setup with `ScopeMismatch`, because IoT's `test_settings`/`test_app_settings` are still function-scoped (step 10).
+- `StubLifecycleCoordinator` (`tests/testing_utils.py`) lacks `unregister_lifecycle_notification`, so every test that builds one fails at instantiation (step 10).
+- `tests/services/test_coredump_service.py` (about `:495`–`:680`) calls `_parse_coredump_thread` synchronously in the test thread. That now runs `scoped_session(container)`, which commits, closes the container's `db_session` and resets the provider. Under the template's savepoint `session` fixture, that may commit or close the test's own session: those tests probably want `committed_app`.
+- Mock-only test files can be checked before step 10 with `uv run pytest --noconftest <files>`, once the stub has its method.
+- `tests/test_openapi_cache.py` was not run; the cache was refreshed from the dev backend.
+
+**For the next apps.** Expect the same two frontend gaps as IoT: a lock holding `eslint-plugin-react-hooks` 7.0.x, and `tsc` errors after the OpenAPI refresh wherever app code reads a defaulted response property as always present. Expect step 6's `uv lock --upgrade-package mypy` too.
 
 ## Phases
 
