@@ -63,7 +63,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 6 | Frontend: fixes, Playwright on PostgreSQL | done 2026-10-17 | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`, `d2f6ded`, `f9f9a5b`, `9bd07c9`; backend `b9ac732`, `57427d0`; parent `f38d2f8`, `101033b`, `096f326`, this entry |
 | 7 | Frontend: stages, SSE, defaults | done 2026-10-17 | frontend `ec93ae9`, `13a4c62`, `fcce4fd`, `98375e0`, `678a52a`; parent `2d351fe`, `323bd88`, this entry |
 | 8 | Root: CI, images, dev stack, architecture, tooling | done 2026-10-17 | frontend `f308682`, `b0b1b16`, `0b87bad`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, `2ea8724`, `33c6bae`, `2d5bfe8`, `13611f4`, this entry; DockerImages clone `7e7c1f7` (not pushed) |
-| 9 | Conventions guide and skill | in progress: step 1 done | parent `91f1de1`, this entry |
+| 9 | Conventions guide and skill | done 2026-10-17 | parent `91f1de1`, `5374474`, this entry; DevGuides clone `92bc97d`; KubeCoderConfig clone `c5db31a`, `ec17ea5`; JenkinsPipelineUtils clone `01bf1fe` (none pushed) |
 | 10 | Release | todo | |
 | 11 | App: IoTSupport | todo | |
 | 12 | App: ElectronicsInventory | todo | |
@@ -559,7 +559,7 @@ Frontend `f308682` (the `@preview` tag), `b0b1b16` (step 2) and `0b87bad` (rulin
 **For phase 9:**
 
 - **RT13:** the convention is that a spec needing a production build skips without `PLAYWRIGHT_PREVIEW_MODE=true` and carries `@preview`. `frontend/CLAUDE.md`'s Playwright section says so.
-- **Still open, for the operator or phase 9 (worklist §4.3):** after step 1, JenkinsPipelineUtils' `docs/pages/types/modern-app.md`, which says files follow "the reference file below, not the template", and the jenkins-pipelines skill's "two files predate the guide" paragraph (KubeCoderConfig) are stale.
+- **Still open, for the operator or phase 9 (worklist §4.3):** after step 1, JenkinsPipelineUtils' `docs/pages/types/modern-app.md`, which says files follow "the reference file below, not the template", and the jenkins-pipelines skill's "two files predate the guide" paragraph (KubeCoderConfig) are stale. Done in phase 9.
 
 **For phase 10, the changelog takes:**
 
@@ -592,9 +592,11 @@ The no-shell test-app is harness-only and reaches no app.
   - a CI-shaped run (`STAGE=tst BUILD_CACHE=true`, `--output-mode full --junitxml-dir … --retries 2`, one worker, a fresh pnpm store and no `node_modules`) was green, with `SUITE_RESULT` backend 9/0/0, frontend 38/0/5 and frontend-preview 5/0/0 (3,650 MB cgroup peak). So `STAGE=tst` changes no outcome of the domain or Playwright suites.
 - **Playwright at the close,** with all of phase 8 in: `run-suite --suite frontend` at one worker passed the dev-server pass and the preview pass (runner peaks 3,309 and 1,307 MB).
 
-### 2026-10-17, phase 9, step 1: the guide's source
+### 2026-10-17, phase 9: conventions guide and skill
 
-Parent `91f1de1`. Run as a chunk: steps 2 and 3, the stale pipeline docs and the phase's close are the next chunk's.
+Run in two chunks. Parent `91f1de1` (the guide's source), `5374474`, this entry; DevGuides clone `92bc97d`; KubeCoderConfig clone `c5db31a`, `ec17ea5`; JenkinsPipelineUtils clone `01bf1fe`. None is pushed. DevGuidesPrivate is cloned at `/work/scratch/DevGuidesPrivate` (`9579fbf`, unchanged), for the hub build only.
+
+**The guide (step 1):**
 
 - **Where:** `guide/`, a top-level folder of this repo (`docs/` holds the port's working documents). It holds `mkdocs.yml`, `pyproject.toml` and `uv.lock` (Zensical 0.0.71, as JenkinsPipelineUtils' guide), `check_site.py`, and `pages/` (the `docs_dir`, with `assets/favicon.svg`). `.gitignore` takes `/guide/.venv/` and `/guide/site/`, and `CLAUDE.md`'s repository tree names the folder. The root template is not affected: `copier.yml` renders `root/template` only.
 - **How it builds:** `kc project test guide`, the new `guide` component in `.kubecoder/project.yaml`: `cexec modern-app uv run https://raw.githubusercontent.com/pvginkel/DevGuides/main/tools/check_guide.py ..`. Green: "ModernAppTemplate: guide (/modern-app/): pass, 0 warning(s)". `kc project test` now runs it with the backend and root suites. By hand, from `guide/`: `cexec modern-app uv run --locked zensical build --strict`, then `cexec modern-app uv run --locked python check_site.py`. `check_site.py` holds every rule heading to `### ID-n — Title { #id-n }`, ids unique across pages, and a `**Why.**` paragraph under each rule; a broken heading and a missing reason were checked to fail it.
@@ -615,12 +617,43 @@ Parent `91f1de1`. Run as a chunk: steps 2 and 3, the stale pipeline docs and the
   - **RT13:** the template has no pytest retries (DA had two); CI retries Playwright only, through `run-suite --retries 2`. The template does not test against a real IdP, unlike DA's Keycloak; TEST-1 says what stands in for it.
   - **RT15:** the phase 5 note's "I/O timeout near the check's timeout" is not what the template's checks do: S3 relies on boto3's default timeouts (60 s), the SSE gateway check on its 5 s `http_timeout`, against the checks' 0.8 s. READY-3 requires an I/O timeout of its own and explains the cost of a long one, without "near".
   - **TEST-2's recipe:** `tests/conftest.py` star-imports `conftest_infrastructure.py`, so an app's own `pytest_configure` there replaces the template's pre-flight. The recipe uses `pytest_sessionstart`; `pytest.exit` there was checked to stop the run with its return code, after the template's `pytest_configure` ran.
-- **Findings for the operator (the guide is not blocked on them):**
-  - **API-1 against the apps:** the apps address resources by integer (ElectronicsInventory 72 `<int:…>` routes, IoTSupport 21, ZigbeeControl 2) and by natural keys (EI's `part_key`, IoTSupport's `code` and `model_code`), and the template's own `test-app-domain` has `<int:item_id>` on an integer key. API-1 exempts a table that already keys on an integer, which is my reading of RT11 for a guide stated as the world is. The operator may want to confirm the exemption, or rule natural keys too.
-  - **Template code that breaks a rule:** three fixed waits (PW-3) in the frontend template, `tests/support/helpers/toast-helpers.ts:155` and `:276` and `tests/infrastructure/deployment/deployment-banner.spec.ts:64`; the backend's `app/api/tasks.py.jinja` answers 404 with a hand-built `{"error": "Task not found"}` outside the envelope (BE-2, API-5). Candidates for a template change, not taken here.
-  - **Two paging shapes:** the frontend's `src/hooks/use-paginated-fetch-all.ts` pages by `offset`/`limit` at 1,000 a page, while the backend's `PaginationQuerySchema` takes `page`/`per_page` with `per_page` at most 100. API-4 rules the backend endpoint only.
-- **For step 2 (DevGuides):** `/work/scratch/DevGuides` is at `origin/main` (`be17cb6`, which has the palette check this guide passes). The commit is worklist §6.3's two edits: `ModernAppTemplate` in `sources.txt`, and its `dir('ModernAppTemplate') { git url: …, branch: 'main', credentialsId: … }` clone in the `Jenkinsfile`'s `Checkout`. DevGuides' own `kc project test` is `cexec python uv run tools/build_hub.py /work`, which expects every source repo side by side under its argument; here DevGuides and JenkinsPipelineUtils sit in `/work/scratch`, DevGuidesPrivate is not cloned, and this repo is `/work/ModernAppTemplate`, so the hub build needs a root that holds all four (for example a directory of clones or symlinks) and possibly a `cexec` target other than `python`. The Jenkins clone of this repo has no `backend/` or `frontend/`, which the guide does not need.
-- **For step 3 (the skill):** point it at `https://dev-guides.home/modern-app/`, its `llms.txt`, `llms-full.txt` and the pages' `index.md` copies; group the rules by the pages above, each a brief with its id; trigger it on writing, changing or reviewing backend, frontend or test code in an app generated from ModernAppTemplate. The checking how-to is the template's own gates, not a linter. A rule changed in the guide changes in the skill in the same sitting.
+
+**The hub (step 2):**
+
+- **DevGuides `92bc97d`** is the contract's two edits, and nothing else registers a source (the `Dockerfile` and `build_hub.py` read `sources.txt`): `ModernAppTemplate` in `sources.txt`, and a `dir('ModernAppTemplate') { git url: 'https://github.com/pvginkel/ModernAppTemplate.git', branch: 'main', credentialsId: … }` clone in the `Jenkinsfile`'s `Checkout`. The controller's declarative linter validated the `Jenkinsfile`. The Jenkins clone of this repo has no `backend/` or `frontend/`, which the guide does not need.
+- **The check:** DevGuides' `kc project test` (`cexec python uv run tools/build_hub.py /work`) expects the four source repos side by side under `/work`, and this environment has neither that layout nor a `python` container. `/work/scratch/dev-guides-root` holds symlinks to `/work/scratch/DevGuides`, `/work/scratch/DevGuidesPrivate`, `/work/scratch/JenkinsPipelineUtils` and `/work/ModernAppTemplate`; from `/work/scratch/DevGuides`, `cexec modern-app uv run tools/build_hub.py /work/scratch/dev-guides-root` is green: "out/ holds 3 guide(s) …: Data modelling (/data-modelling/), Jenkins pipelines (/pipelines/), Modern apps (/modern-app/)", with the card on the index and the line in the root `llms.txt`. Green again after the stale-doc fix. This is the hub check to re-run before phase 17.
+
+**The skill (step 3):** KubeCoderConfig `c5db31a`, plugin 0.13.2 → 0.14.0 (a new skill is a minor bump).
+
+- `kubecoder/skills/modern-app/SKILL.md`, named after the guide's path as `data-modelling` is. Its description triggers on writing, changing or reviewing code in a modern app (endpoints, paged lists, status values, errors, services and their readiness checks, SSE, toasts and downloads, backend tests, Playwright specs).
+- The body: the intro; what a modern app is, the template's code as a rule's definition, and that a template-owned file that breaks a rule is fixed in the template, never in the app; reading the guide (`llms.txt`, `llms-full.txt`, `<page>/index.md`, `#test-2`); checking code (the app's gates catch PW-2 through ESLint, STATUS-3 through `tsc` and TEST-2 through the pre-flight, and the rest is read); then the 34 rules under their eight pages, each a brief with its id.
+- In the same commit, the dev-guides skill's "the Jenkins guide is the one guide whose source lives in a library repo", false now, names both guides that live in the repo of the code they rule.
+- Gate: `npm run format:check` (KubeCoderConfig's `kc project lint`), through `cexec modern-app`, since there is no `frontend` container here. Green.
+
+**The stale pipeline docs (phase 8's note, worklist §4.3):**
+
+- **JenkinsPipelineUtils `01bf1fe`:** `docs/pages/types/modern-app.md` no longer says a file "follows the reference file below, not the template". It says the root template renders the reference file with the app's Copier answers, and that a change to the type is made in the template too. It also adds PilotApp to the type's apps: its `PilotApp` job runs `modernApp.test` (last build 11, green). The guide check, `check_guide.py ..` from `docs/` through `cexec modern-app` (no `iac` here), passes with 0 warnings. `lint_examples.py` was not run, since no example changed.
+- **KubeCoderConfig `ec17ea5`** (0.14.1): the jenkins-pipelines skill's "Two files predate the guide" paragraph becomes "ModernAppTemplate renders a type", as on the page, and "One file predates the guide", KitchenDisplay's, unchanged.
+
+**Findings for the operator, from step 1 (nothing waits on them):**
+
+- **API-1 against the apps:** the apps address resources by integer (ElectronicsInventory 72 `<int:…>` routes, IoTSupport 21, ZigbeeControl 2) and by natural keys (EI's `part_key`, IoTSupport's `code` and `model_code`), and the template's own `test-app-domain` has `<int:item_id>` on an integer key. API-1 exempts a table that already keys on an integer, which is my reading of RT11 for a guide stated as the world is. The operator may want to confirm the exemption, or rule natural keys too.
+- **Template code that breaks a rule:** three fixed waits (PW-3) in the frontend template, `tests/support/helpers/toast-helpers.ts:155` and `:276` and `tests/infrastructure/deployment/deployment-banner.spec.ts:64`; the backend's `app/api/tasks.py.jinja` answers 404 with a hand-built `{"error": "Task not found"}` outside the envelope (BE-2, API-5). Candidates for a template change, not taken here.
+- **Two paging shapes:** the frontend's `src/hooks/use-paginated-fetch-all.ts` pages by `offset`/`limit` at 1,000 a page, while the backend's `PaginationQuerySchema` takes `page`/`per_page` with `per_page` at most 100. API-4 rules the backend endpoint only.
+
+**For phases 10–16:**
+
+- **Phase 10:** the guide and the skill change no template and give the apps no migration step. The coordinated changelog may name them: `guide/`, https://dev-guides.home/modern-app/ and `kubecoder:modern-app`.
+- **Phases 11–16:** the skill reaches no session until KubeCoderConfig is pushed and the plugin updates (this environment runs 0.13.1). Until then, the rules are in `guide/pages/`. The apps' `CLAUDE.md` do not link the guide: the skill carries it.
+- **Any phase that changes a rule** changes it in the skill in the same sitting, and `kc project test guide` is its gate.
+
+**For phase 17:**
+
+- **The first push group** is DevGuides, KubeCoderConfig, JenkinsPipelineUtils and DockerImages. Phase 17's step 2 now names JenkinsPipelineUtils. DevGuidesPrivate is unchanged.
+- **The `DevGuides` job** (last build 5) starts on every push to DevGuides or JenkinsPipelineUtils. A build before this repo is pushed finds no guide in ModernAppTemplate, which `check_guide.py` accepts ("no guides"), so it stays green.
+- **This repo has no GitHub push hook.** `gh api repos/pvginkel/ModernAppTemplate/hooks` is empty, while DevGuidesPrivate and JenkinsPipelineUtils have Jenkins' hook. So pushing this repo does not start `DevGuides`, and /modern-app/ does not publish by itself. The pipelines guide's new-repo page says Jenkins installs a repo's hook when a job's configuration arrives with the push trigger; not seen working here. So, after a `DevGuides` build has cloned ModernAppTemplate, a `GET` and then a `POST` of `/job/DevGuides/config.xml` should install it. Then push this repo. Without the hook, start a `DevGuides` build by hand. Either way it is a write to Jenkins, so it is the operator's call. Done when https://dev-guides.home/modern-app/ serves and the root `llms.txt` lists it.
+
+**Operator actions:** ModernAppTemplate's push hook, or a hand-started `DevGuides` build, at phase 17 (above). The three findings above, at any time.
 
 ## Phases
 
@@ -892,11 +925,11 @@ Parent `91f1de1`. Run as a chunk: steps 2 and 3, the stale pipeline docs and the
 
 1. **Summary:** give the operator a per-repo summary: commits, tags, gate results, and the operator actions logged. Wait for the go-ahead.
 2. **Push in dependency order:**
-   1. DevGuides, KubeCoderConfig and DockerImages (if changed);
+   1. DevGuides, KubeCoderConfig, JenkinsPipelineUtils and DockerImages (if changed);
    2. this repo, `backend/` and `frontend/`, with tags;
    3. the six deploy repos;
    4. the six apps, whose pushes start their Jenkins builds.
-3. **Watch:** follow the builds to green through Jenkins, and the Argo CD syncs after them.
+3. **Watch:** follow the builds to green through Jenkins, `DevGuides` included (phase 9's log: this repo's push hook), and the Argo CD syncs after them.
 4. **Report:** report the result, and list what's left for the operator: the per-app architecture Jenkins jobs, and any architecture YAMLs not seeded.
 
 **Done when:** every app is built and synced, and the report is sent.
