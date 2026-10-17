@@ -62,7 +62,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | done 2026-10-17 | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`, `d2f6ded`, `f9f9a5b`, `9bd07c9`; backend `b9ac732`, `57427d0`; parent `f38d2f8`, `101033b`, `096f326`, this entry |
 | 7 | Frontend: stages, SSE, defaults | done 2026-10-17 | frontend `ec93ae9`, `13a4c62`, `fcce4fd`, `98375e0`, `678a52a`; parent `2d351fe`, `323bd88`, this entry |
-| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: steps 1–3 done | frontend `f308682`, `b0b1b16`; backend `96ee519`; parent `07fd094`, `8d28f63`, the step entries; DockerImages clone `7e7c1f7` (not pushed) |
+| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: steps 1–6 done | frontend `f308682`, `b0b1b16`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, the step entries; DockerImages clone `7e7c1f7` (not pushed) |
 | 9 | Conventions guide and skill | todo | |
 | 10 | Release | todo | |
 | 11 | App: IoTSupport | todo | |
@@ -563,6 +563,76 @@ Backend `96ee519` and frontend `b0b1b16` (step 2); `/work/scratch/DockerImages` 
   - `Procfile.dev` on `dev-watch.sh`;
   - the DockerImages dependency (correction 13).
 - **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green after both steps. No Playwright run was needed: neither step changes what the suite runner or Playwright starts. The second build's `.copier-answers.yml` churn in `backend/` and `frontend/` was discarded.
+
+### 2026-10-17, phase 8, steps 4–6: architecture, dependency checker, root diff
+
+Parent `0d3f7a7` (step 4), `953bbf5` (step 5), `67601c2` (step 6) and `3f43ff2` (MAT-12's docs); backend `332a431` (the `database_name` fix) and `40cd8da` (MAT-12 part 2); this entry. The frontend is unchanged; its regen churn was discarded.
+
+- **Step 4, the architecture producer (D8, RT06; correction 1 and operator answer 3 applied):**
+  - **`Jenkinsfile.architecture.jinja`** (new) is the pipeline guide's app-architecture reference file, with `repo_name` and `github_owner` filled in. Its header goes through `wordwrap(97)` like the `Jenkinsfile`'s.
+  - **Checked:** the root test-app's render is the guide's reference file and PilotApp's file with the names swapped. Rendered for FieldnotesApp, it matches that app's file byte for byte. The controller's declarative linter accepts it. No Jenkins run was possible.
+  - **`_skip_if_exists`** in the root `copier.yml`. All six apps have the file, so `copier update` leaves it alone.
+  - **No `scripts/arch-validate.py` and no model.** The validator ships in `aac-tools`, and the template ships no `docs/architecture/` (worklist §6.5).
+  - **The generated `CLAUDE.md`:**
+    - The repo-structure line names `Jenkinsfile.architecture`.
+    - A new "Architecture model" section says the model is kept current centrally (`tooling/fleet.py update` in `pvginkel/Architecture`), and that nothing runs from the app after a change.
+    - While `docs/architecture/` holds no model, the agent nudges the operator to seed it, in order: `/seed-architecture`, in a clone that `python3 tooling/fleet.py stage <Repo>` stages; push the model; then the operator creates `AaC/<Repo>` from the guide's `config.xml` and adds the `pipeline-producers.yaml` entry.
+  - **`.kubecoder/config.yaml.jinja`** gains the `aac-tools` toolchain. The root `lint` in **`project.yaml.jinja`** runs `cexec aac-tools arch-validate docs/architecture/*.yaml`, behind an `if ls docs/architecture/*.yaml` guard that prints a pointer to `CLAUDE.md` while there is no model. That keeps a new app's `kc project lint` green before seeding.
+    - The guard was checked by hand both ways.
+    - `arch-validate` itself didn't run: this environment has no `aac-tools`.
+  - **Ownership:** `CLAUDE.md` and `.kubecoder/*` are app-owned, so all of this reaches new apps only.
+- **Step 5, the dependency checker (RT07):** template-owned `scripts/check_updates.py`, stdlib only. It is run as `cexec modern-app python3 scripts/check_updates.py [--json]`, with no `pyproject.toml` entry (worklist RT04 row). It keeps DA's file name, unlike the template's hyphenated scripts.
+  - **Discovery:**
+    - A directory with a `uv.lock` (and a `pyproject.toml`) is a Python component. A workspace's members come through its root's lock, labelled `backend (python, <member>)`.
+    - A directory with a `package.json` is an npm component.
+    - Hidden directories, `node_modules`, `test-app`, `dist`, `build`, `logs` and `test-results` are pruned.
+  - **Deviation from the worklist's RT07 note:** Python uses `uv tree --outdated --depth 1 --frozen` (text, parsed), not `uv pip list --outdated`. It lists direct dependencies only, with their dependency groups, at their locked versions, and needs no venv.
+  - **npm** stays on DA's `pnpm outdated --format json`. It needs `node_modules`; without them the component is a warning.
+  - **Output:** a component that fails is a warning on stderr, and the exit is 0. DA's major/minor/patch tables and `--json` are kept.
+  - **Checked** in the root test-app, and read-only against FieldnotesApp (four workspace members and a frontend; 47 updates).
+- **Step 6, the rest of the root diff:** nothing more to take. Worklist §2's takes have all landed:
+  - RT01's wait helpers are phase 2's `backend/scripts/wait-for-services.py`;
+  - the test-mode env is step 1's preview pass;
+  - RT02 is step 1;
+  - RT04's RT07 is step 5, and its `CLAUDE.md` section is step 4.
+
+  The commit fixes two comments in `.kubecoder/config.yaml.jinja` that step 1 made stale: the RustFS service runs in the `Jenkinsfile`'s "Test" stage (there is no "Run validation" stage), and the images are built with `helmCharts.kaniko2`. DA's `test_process.py` stays out (worklist: leave, unless the operator wants a root test gate).
+- **MAT-12, part 2:** template-owned backend `tests/test_openapi_cache.py`. **MAT-12 is closed** (Done, Resolved), citing frontend `98375e0`, backend `40cd8da` and parent `3f43ff2`.
+  - **How it works:**
+    - It builds the app in a subprocess (`create_app(skip_background_services=True)` and the Flask test client), because Spectree documents only a process's first app.
+    - It writes the document to a file, compares it with `../frontend/openapi-cache/openapi.json` as parsed JSON, and on a mismatch fails naming the added, removed and changed paths and `scripts/regenerate-openapi.py --frontend`.
+    - It skips where no frontend sits beside the backend, as in `backend/test-app`; the domain suite now reports 9 passed and 1 skipped.
+  - **Where it runs:** in the suite runner's backend suite, so in CI.
+  - **Checked** in the root test-app: it passes on the committed cache, and fails on a doctored one naming all three kinds of change.
+  - The generated `CLAUDE.md` mentions the test, and `copier_approach.md` lists it.
+- **The hyphenated-`project_name` setup bug: fixed at both causes** (backend `332a431`).
+  - **The default:** the backend's `database_name` now defaults to `project_name | replace('-', '_')`, the root's default.
+  - **The script:** `scripts/init-dev-database.py` (template-owned) loads `backend/.env` with `load_dotenv` before it reads `DATABASE_URL`, as `wait-for-services.py` does. The environment still wins.
+  - **Checked in the root test-app:**
+    - `kc project setup backend`, which works there, created `test_app` and `cli upgrade-db` migrated it.
+    - A `.env` naming another database made the script create that one.
+    - A `DATABASE_URL` in the environment won over `.env`.
+    - The harness's stale dev databases `test-app` and `test_app` were dropped first.
+  - **No app needs a by-hand edit.** Every app's backend answers record `database_name`, so the new default changes no render. The three database apps' two answers already agree (ElectronicsInventory `electronics_inventory`, IoTSupport `iotsupport`, PilotApp `pilot`). DHCPApp, ZigbeeControl and FieldnotesApp have no database. The script change arrives with the update.
+- **What apps meet in phases 11–16:**
+  - **`tests/test_openapi_cache.py`** arrives with the backend update and fails until the app's cache is refreshed. Phase 7 already has every app refresh and commit `frontend/openapi-cache/openapi.json` after the backend update, so do that before the gates.
+    - The test builds the document under the test settings (`.env`, then `.env.test`), and `regenerate-openapi.py` builds it from the dev server under `.env`. For the template the two are the same.
+    - If the test still fails right after a refresh, the app's document depends on its settings, for example a blueprint registered under a flag in `register_blueprints`. Find that before changing the test.
+  - **`scripts/check_updates.py`** arrives with the root update; nothing by hand.
+  - **The architecture files:** nothing required.
+    - Optional, the operator's call, since `.kubecoder/*` is app-owned: the template's `arch-validate` lint step. Today only ElectronicsInventory and PilotApp have one.
+    - The `aac-tools` toolchain is in EI, DHCPApp, FieldnotesApp and PilotApp, and missing from IoTSupport and ZigbeeControl.
+- **Operator actions:** none for the six apps. Per new app: seed the model, push, create `AaC/<Repo>`, add the `pipeline-producers.yaml` entry (as the generated `CLAUDE.md` says).
+- **For phase 10:** the changelog takes:
+  - `Jenkinsfile.architecture` (new apps only, app-owned), the `CLAUDE.md` architecture section, and `aac-tools` with the lint step;
+  - `scripts/check_updates.py`;
+  - the stale-cache test (MAT-12; apps refresh their cache with the update);
+  - the backend `database_name` default and `init-dev-database.py` reading `.env`.
+- **For the chunk that closes phase 8 (the no-shell variant, ruling 6):** nothing here touches the frontend template. The root test-app's backend now has a working setup (`.env`, venv, `test_app` migrated) until the next root regen wipes it.
+- **Gates:**
+  - `kc project build`, `test` (mother 773; domain 9 passed, 1 skipped; root backend suite all passed) and `lint` were green after the template edits.
+  - Step 6's comment fix and the docs came after; `kc project build root` and `kc project lint root` were green after them.
+  - No Playwright run: nothing here changes what the suite runner or Playwright starts. The new test runs inside the backend suite.
 
 ## Phases
 
