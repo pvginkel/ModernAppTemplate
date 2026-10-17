@@ -60,7 +60,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
 | 4 | Backend: auth | done 2026-10-17 | backend `7db254c`, `997ea1f`, `c3b8607`, `a84795a`; frontend `fbf00f9`; parent `e2064d4`, `670d8d8`, this entry |
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
-| 6 | Frontend: fixes, Playwright on PostgreSQL | in progress: FE01–FE09 done | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`; parent: the FE01–FE09 entry |
+| 6 | Frontend: fixes, Playwright on PostgreSQL | in progress: FE01–FE18 done | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`; parent `f38d2f8` (the FE01–FE09 entry), the FE11–FE18 entry |
 | 7 | Frontend: stages, SSE, defaults | todo | |
 | 8 | Root: CI, images, dev stack, architecture, tooling | todo | |
 | 9 | Conventions guide and skill | todo | |
@@ -355,6 +355,49 @@ Frontend `23dd7dc` (FE02 with FE03), `c2d9fde` (FE04), `9a8e9b6` (FE06) and `ebb
   - **Every app:** an unexpected error toast no longer fails a spec (FE09), and a ui-state scope whose data is cached at mount now emits `ready` on mount (FE08). If an app spec changes outcome at the sync, look here first.
 - **For phase 10:** the changelog takes FE03's scale (apps that scaled the percentage themselves), FE07's regenerated types, FE09's console policy and FE04's process groups.
 - **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green. Playwright at one worker passed (3,323 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (5,009 MB peak).
+
+### 2026-10-17, phase 6, FE11–FE18: frontend fixes, second half
+
+Frontend `540430c` (FE11, FE13, FE14), `3824500` (FE12), `3ac2cdf` (FE17) and `cbe04b4` (FE18); parent: this entry. FE20 had landed (v0.20.4's placeholder route draws `UserDropdown` under `use_oidc and not use_app_shell`), so nothing was left to do.
+
+- **FE11:** (a) the `src/routes/**` ESLint override; (c) `.env*` with `!.env.example` in `.gitignore`, which made the `.env.test` line redundant, so it went; (d) `build-fast`, with `build` = `build-fast && check`. (b) is not taken, as ruled.
+- **FE11, `packageManager` (deviation from the worklist):** it stays `pnpm@9.0.0`. The worklist called it stale, but it decides which pnpm runs. The modern-app container's global pnpm is 12.8.1, yet in a project carrying the field it runs 9.0.0 (pnpm's managed package-manager versions), and the frontend `Dockerfile`'s corepack honours the field too. Dropping it would move every frontend to pnpm 12. pnpm 10 and later hoist nothing to the root `node_modules`, so FE11 (b) would become necessary, and the lockfile and build-script approval would change with it. That is a toolchain upgrade of its own, for the operator; phase 8's move to `modern-app-frontend-build` (corepack `pnpm@latest`) is where it would fit.
+- **FE12:** `configureSseProxy` (the portal's copy, which deletes `transfer-encoding` before `writeHead`) is rendered under `use_sse` and sits on `/api/sse` in both `server` and `preview`. `server.strictPort: true`; `preview.strictPort` defaults to it. No `xfwd`, per phase 4. `/api/sse` does not carry `forwardOrigin`.
+- **FE14:** `PLAYWRIGHT_RETAIN_VIDEO=true` gives `retain-on-failure`; anything else gives `off`. The name keeps its meaning of "turn video on", but it now has to be exactly `true`, where any non-empty value used to work.
+- **FE17:**
+  - **`vite.config.ts`:** DA's `define` (`process.env.VITE_TEST_MODE || 'false'`) and `external` (unless `VITE_TEST_MODE === 'true'`), under the `rollupOptions` key (Vite 7 pin).
+  - **Preview runs:** `PLAYWRIGHT_PREVIEW_MODE=true` makes `startFrontend` pass `--preview`. `testing-server.sh` then execs `node_modules/.bin/vite preview --strictPort --mode test`.
+  - **Addition beyond DA:** the `--preview` branch exits 1 ("--preview needs dist/ from 'VITE_TEST_MODE=true pnpm build'") unless `dist/assets/*.js` contains `__playwright_emitTestEvent`. Without that check, a plain build would time every spec out.
+  - **SharedWorker specs:** the two in `sse-connectivity.spec.ts` call `test.skip(PLAYWRIGHT_PREVIEW_MODE !== 'true', …)` first thing in their bodies, so the default dev-server run now skips them.
+  - **Docs:** the two-step run is documented in `frontend/CLAUDE.md`, in a new "Playwright" section.
+  - **Checked:** a plain build has 0 test markers. `VITE_TEST_MODE=true pnpm build` has 1 (`__playwright_emitTestEvent`). Preview mode by hand at one worker, in `root/test-app/frontend` with the commands from that section: 35 passed, the SharedWorker specs included and none skipped, in 10.5 s (the frontend was ready in about 200 ms). The guard refuses a plain `dist/` and starts on a test build.
+- **FE18:** each service gets 120 s and the worker fixture 300 s. The last non-OK status and body (500 characters) go into the timeout error. The poll sleeps only what is left of its interval, which stays at 200 ms, and a 503 is still not ready. The `ready at … (N ms)` line now prints with log streaming off too, three lines per worker start.
+- **knip:** no template-owned file was added or removed, so `knip-template-ignore.json` is unchanged.
+- **For phase 7 (env names, FE16):**
+  - The names in place: `VITE_TEST_MODE=true` for the build and `PLAYWRIGHT_PREVIEW_MODE=true` for the run. FE16's spec gates on `PLAYWRIGHT_PREVIEW_MODE` the way the SharedWorker specs do.
+  - A bridge it adds (`__sseForceWorkerReconnect`) must survive the test-mode build, since only that build reaches the worker.
+  - A rename touches `servers.ts`, the spec gates, `testing-server.sh`'s message, the comment in `vite.config.ts.jinja` and `frontend/CLAUDE.md`.
+- **For phase 8 (`local.py.jinja`):**
+  - The runner's `pnpm build` is plain, and nothing sets `PLAYWRIGHT_PREVIEW_MODE`, so CI skips the preview-only specs.
+  - The whole suite passes in preview mode, so one way is DA's: set `VITE_TEST_MODE=true` on the runner's build step (which still runs `check`) and run Playwright with `PLAYWRIGHT_PREVIEW_MODE=true`. The dev-server path then goes untested in CI. The other way is a second, preview-only pass.
+  - Either way, the image build (`Dockerfile`, `pnpm build`) must stay plain.
+  - Update the last sentence of `frontend/CLAUDE.md`'s "Playwright" section when the runner changes.
+- **For phase 9 (RT13):** the preview-mode paragraph's source is `frontend/CLAUDE.md`'s "Playwright" section; the env names are final unless phase 7 renames them.
+- **For the FE23 chunk:**
+  - `startBackend` still takes `sqliteDbPath`. FE23's `--database-url` backend starts under the new 120 s timeout, and a 503 readyz still fails startup, with the body in the error.
+  - Preview mode hasn't run against PostgreSQL backends. One preview pass after FE23 (the two commands in `frontend/CLAUDE.md`) would cover it.
+  - `root/test-app/frontend/dist` holds my test-mode build until the next suite run rebuilds it plain.
+- **What apps must change by hand (phases 11–16):**
+  - **Every app:** `package.json` is app-owned, so FE11's `build-fast`/`build` split reaches new apps only. It is optional at a sync, since nothing calls `build-fast`.
+  - **Every app:** the two SharedWorker specs now skip in the default run. No app sets `PLAYWRIGHT_RETAIN_VIDEO`, and videos are now off unless it is `true`.
+  - **IoTSupport:** besides dropping `xfwd` (phase 4), its template-owned `vite.config.ts` takes `configureSseProxy` and `strictPort`. Its `define` matched the template's old one, so FE17 merges cleanly.
+  - **ElectronicsInventory:** it tracks `frontend/.env.test.example`. The new `.env*` ignore leaves a tracked file tracked, but a new copy would be ignored.
+- **For phase 10:** the changelog takes FE14's video default and the new meaning of `PLAYWRIGHT_RETAIN_VIDEO`, FE13's `Host $http_host`, FE12's SSE flush and `strictPort`, FE17's test-mode build fix and preview mode, FE18's timeouts, and FE11's `.gitignore` and `build-fast`.
+- **For the operator (FE20, raised by the worklist):** `frontend/regen.sh` generates only `use_app_shell=true`, so the harness never builds or tests the no-shell variant that ZigbeeControl, FieldnotesApp and PilotApp use. Should a second generated variant be added?
+- **Gates:**
+  - `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green. Lint's one warning, an unused `eslint-disable` at `sse-context-provider.tsx:316`, is older than this chunk.
+  - Playwright at one worker passed (3,285 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (4,988 MB peak).
+  - The preview guard landed after these runs. It was regenerated and checked by hand, as above.
 
 ## Phases
 
