@@ -35,6 +35,14 @@ None of these blocks phases 1–10. Each names the phase that needs the answer.
 4. **PilotApp slice 002 (phase 16).** Confirm that no model or revision is in flight before phase 16 replaces PilotApp's test conftest. Its spec repo isn't checked out here.
 5. **MAT-12 (optional).** No ruling takes it. It could ride along in phases 7 and 8, or stay a card (§7).
 
+**The operator's answers (2026-10-17):**
+
+1. Every one of these apps has an `editor` role; ElectronicsInventory also has a `reader` role. They are **client roles**, so a grant reaches one app only. No lockout to handle: phases 11, 13 and 14 apply D2 as built.
+2. **Yes:** set `HOMELAB_INTERNAL=true` on all of them, the public hosts included.
+3. **Agreed:** phase 8 follows the estate form (plan correction 1).
+4. PilotApp's planning is paused until the whole port is done, so nothing is in flight: phase 16 replaces its test conftest.
+5. **Take MAT-12** where it fits: part 1 (the error text and `package.json`) in phase 7, part 2 (the stale-cache test) in phase 8. Close the card when both land.
+
 ## Plan corrections
 
 These facts change what a later phase does. Each phase logs the correction when it applies it.
