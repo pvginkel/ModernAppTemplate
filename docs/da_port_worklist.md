@@ -43,6 +43,11 @@ None of these blocks phases 1–10. Each names the phase that needs the answer.
 4. PilotApp's planning is paused until the whole port is done, so nothing is in flight: phase 16 replaces its test conftest.
 5. **Take MAT-12** where it fits: part 1 (the error text and `package.json`) in phase 7, part 2 (the stale-cache test) in phase 8. Close the card when both land.
 
+**Two more rulings (2026-10-17, raised by phase 6):**
+
+6. **The no-shell variant gets gated.** `frontend/regen.sh` renders only `use_app_shell=true`, but ZigbeeControl, FieldnotesApp and PilotApp run `use_app_shell=false`. Phase 8 adds a second generated frontend test-app for `use_app_shell=false` to the harness (`regen.sh`, `kc project build|test|lint`), so both variants are built and checked.
+7. **pnpm stays at 9.0.0 for this port.** Moving off `packageManager: pnpm@9.0.0` is its own card, MAT-14, after the push.
+
 ## Plan corrections
 
 These facts change what a later phase does. Each phase logs the correction when it applies it.
