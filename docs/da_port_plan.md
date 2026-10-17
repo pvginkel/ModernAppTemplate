@@ -70,7 +70,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 13 | App: DHCPApp | done 2026-10-17 | DHCPApp `752e0a8` (root), `c57c73c` (backend), `446f9cd` (frontend), `d04ceb9` (uv), `ab9ebbf`, `3fa7ec1`, `3331d7a`, `ff80b81`, `41be6b9`, `214687b`, `78bb6e3`, `ec3597d` (root `CLAUDE.md`, found in phase 15); DnsmasqDeploy clone `ed61025` (not pushed); parent `c3bec09`, `e9ea80d`, `6d91d3c`, `abf711b`, this entry; none pushed |
 | 14 | App: ZigbeeControl | done 2026-10-17 | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv), `43baff0`, `9edbf7a`, `4f6295b`, `12dcfc0`, `6fea457`, `62289c5`, `b937119`, `fda3f8a`, `670761e`, `8659be5` (root `CLAUDE.md`, found in phase 15); Zigbee2mqttDeploy clone `a9fc082` (not pushed); parent `5451d57`, `37521f3`, `465d3eb`, `f8a9e5b`, this entry; none pushed |
 | 15 | App: FieldnotesApp | done 2026-10-17 | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`), `727420c` (step 9, readyz), `0a94aa0` (6), `9b58615` (8), `1c048d9` (9), `c38e92a` (11), `5d8aefd` (12), `ea59e3e` (13), `fd0be84` (10), `73ea077` (15), `914d02d` (15, `guessed`), `c330148` (upkeep, `CLAUDE.md`), `d7d7368` (upkeep, `conftest.py`); FieldnotesDeploy clone `4b7ac6a` (not pushed); parent `8449fc1`, `0d49fd4`, `3898196`, `8226f71`, `c0cebe9`, `d7b3fec`, this entry; none pushed |
-| 16 | App: PilotApp | todo | |
+| 16 | App: PilotApp | in progress: steps 1–5 done | PilotApp `8f57f73` (root), `97923ff` (backend), `1f20820` (frontend), `09ab7ef` (step 5, `CLAUDE.md`); parent: the steps 1–5 entry; none pushed |
 | 17 | The push | todo | |
 
 ## Phase log
@@ -1025,6 +1025,51 @@ Changelog steps 1–19 in `/work/FieldnotesApp`, in four chunks, one commit per 
 - If `kc env describe` says the `modern-app` container restarted, run `kc project setup` before the gates.
 - Read memory from the cgroup's `memory.current`, not only the runner's summed RSS (phase 14's note on `memory.peak` stands).
 - PilotApp's `tests/render-chart.py` checks the env (step 17).
+
+### 2026-10-17, phase 16, steps 1–5: syncs and the template's uv
+
+Changelog steps 1–5 in `/work/PilotApp`, one commit per step. Nothing is pushed. No template change was needed, and no rule had to be bent.
+
+**Start (step 1).** The tree was clean and level with origin/main (`2106724`). Copier read the local tags (root `v0.2.0`, backend `v0.14.0`, frontend `v0.21.0`). **Checking:** each component rendered with PilotApp's answers at its old and new tags, in `/work/scratch/pilot-sync/render-{root,backend,frontend}-{old,new}`; `cmp_render.py` there compares every non-`_skip_if_exists` file with the app, and `take_after.py` resolves copier's conflict blocks to the template's side. The old-versus-new-versus-app comparison of the `_skip_if_exists` files says which by-hand steps arrived as hunks.
+
+**Sync (steps 2–4).** `8f57f73` root v0.1.6 → v0.2.0, `97923ff` backend v0.13.3 → v0.14.0, `1f20820` frontend v0.20.4 → v0.21.0. After them, **every template-owned file in all three components equals the render.**
+
+- **Root:** conflicts in `Jenkinsfile` and `Procfile.dev`, both the template's side. The `Jenkinsfile` gains the `postgres` service, `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments, and the services comment above `modernApp.test`; `Procfile.dev`'s backend runs `scripts/dev-watch.sh`. `tools/suite_runner/local.py` merged clean; `scripts/build-cache-{get,put}.sh` and `scripts/check_updates.py` arrived. `scripts/dev.py`, and app-owned `scripts/regenerate-openapi.py` (with `--frontend`) and `Jenkinsfile.architecture`, already equalled the render. Root `pyproject.toml` still pins `ruff==0.11.13` (step 6).
+  - **Root `CLAUDE.md`,** by hand in the same commit: the two uv projects with their committed locks, the stale-cache test, `scripts/check_updates.py`, and the "Architecture model" section with the `arch-validate` sentence (the root lint has that step) and without the seeding steps (`docs/architecture/architecture.yaml` exists). It already had `Jenkinsfile.architecture`, `scripts/dev.py stop` and `--frontend`.
+- **Backend:**
+  - Template-owned conflicts, each the template's side: `alembic/env.py` and `app/cli.py` (two of Pilot's standing edits, which the template now makes: `disable_existing_loggers=False`, and `_database_for_display()` masking the password), `scripts/testing-server.sh`, and 3f84260's `app/api/sse.py` and `app/services/testing_service.py`.
+  - **3f84260's `app/api/testing_auth.py` and `app/schemas/testing_auth.py` merged with no conflict and kept the hook endpoint and `ForceSSECallbackErrorQuerySchema`:** the template never changed those files, so the merge kept Pilot's edits silently. `sse.py` likewise kept an `AuthContext` import and a `testing_service` parameter outside its conflict hunks. Only the render comparison found them; all three are the render now. The hook is the template's `api/testing_sse.py`, at the same URL.
+  - `Dockerfile` (app-owned) conflicted; the template's side equals the render: **step 14 arrived**, a clean swap. Its precondition stands (DockerImages `7e7c1f7` pushed, images rebuilt).
+  - `container.py`: **step 7 arrived** (`health_service=health_service` on `SSEConnectionManager`; no S3). The merge moved `testing_service` below `health_service` and reworded two comments; not taken. `read_role`/`write_role="editor"` stay.
+  - `app_config.py`: kept as Pilot's; the hunk's `dump_for_logging()` without `Sensitive` marks was not taken. `AppSettings` has no fields, so step 8 is FieldnotesApp's case.
+  - `pyproject.toml` conflicted. The merge lost nothing (Pilot has no dependency of its own yet): its hunks were exactly step 6's pins, `watchdog[watchmedo]` and `extend-exclude`. Kept as Pilot's anyway, so that `uv.lock` stays valid for this chunk's gate. Step 6 is all by hand.
+  - `tests/conftest.py`, an unedited render, took the template's docstring paragraph and equals the render. With the template-owned `conftest_infrastructure.py`, that is the whole switch to the PostgreSQL fixtures.
+  - `tests/test_smoke.py` and `vulture_whitelist.py` equal the render (Pilot's uv edits were the template's). `.env.example` is an unedited render and kept its old text (step 11 by hand). No `.env.example.rej`. The update deleted `scripts/dev-server.sh` and `scripts/initialize-sqlite-database.sh`.
+  - **`tests/test_sse_callback.py`: Pilot's role cases kept, the rest dropped** (in `97923ff`). Kept: with OIDC on, a token with `[]`, `["admin"]` or `["reader"]` is refused 403, an `editor` token is accepted and bound (cookie only), a test session with `["admin"]` is refused 403 and one with `editor` accepted; with OIDC off, a test session with `["admin"]` (it was `[]`, the template's no-role case) is refused 403 and one with `editor` accepted. Dropped as the template's own suite's (`tests/api/test_sse_callback.py`): the 401s, the bearer carrier, the local admin, the unknown session, the forced-rejection hook and the disconnect. The 8 left pass on the sidecar.
+- **Frontend:**
+  - Conflicts only in 8b8cf41's `sse-worker.ts`, `sse-context-provider.tsx` and `playwright-binding.d.ts`, each the template's side.
+  - `package.json` and `src/styles/button.ts` are unedited renders and kept their old text, so **steps 12 and 13 are all by hand**: none of step 12's `package.json` lines arrived. Every other `_skip_if_exists` file equals the render but for `public/favicon.png` (Pilot's mark). No `.env.example.rej`.
+  - **`tests/infrastructure/sse/sse-connect-refusal.spec.ts`: kept, with Pilot's two role cases** (an `admin` session refused 403, an `editor` session accepted, on a bare EventSource through the Vite proxy). The forced-callback case was dropped, since the template's `sse-auth-recovery.spec.ts` covers the hook and the recovery, and the header no longer says the direct path ignores `rejected`. Not run yet (step 16).
+  - `docs/sign-in.md`: the plain EventSource (the dev server, browsers without SharedWorker) now recovers from `rejected` as the shared worker does, with no retry loop.
+
+**The template's uv (step 5, `09ab7ef`).** All four standing edits in `CLAUDE.md` are now the template's own: uv, `alembic/env.py`'s loggers, `cli.py`'s masked URL (MAT-13) and the declarative `Jenkinsfile`. The paragraph now says none stands, and keeps the rule for the next one. No `poetry` mention is left. **Gate:** `uv lock --check` and `uv sync --locked` are green at the root (5 packages) and in `backend/` (70), and `uv run python -c "import app, run"` imports.
+
+**For the later chunks (steps 6–19).**
+
+- **6, by hand:** the merge's pins in `backend/pyproject.toml`, `uv lock --upgrade-package mypy`, and the root's `ruff==0.15.22`. **Until step 6 the dev stack's backend doesn't start:** `Procfile.dev` runs `dev-watch.sh`, which needs `watchmedo`. Pilot's backend lint runs `ruff format --check` against an explicit `[tool.ruff.format] exclude`. Under ruff 0.11 it flags the four template-owned files step 6 names, plus `scripts/init-dev-database.py`, a template-owned database-app script the changelog doesn't name; re-check under 0.15. `ruff check` has the two I001s in template-owned `app/database.py` and `tests/test_database_schema.py` that EI saw go away under 0.15.
+- **7 and 14:** arrived; check them, don't redo them. **8:** optional, and `AppSettings` has no fields. **9:** Pilot has no `send_event` or `start_task` call of its own.
+- **10:** light. There are no revisions and no models (`alembic/versions/` holds only `.gitkeep`), and `post_migration_hook` and `load_test_data_hook` are `pass`, so there is no seed data and no drift. Pilot's own tests: `test_access_log.py`, `test_cli.py` (it now meets `_refuse_on_prd`; under testing the stage is `local-tst`), `test_editor_gate.py` and the trimmed `test_sse_callback.py`.
+- **11, 12, 13:** all by hand (unedited renders). Until step 12 adds `pg`, Playwright's global setup fails at its `pg-admin.ts` import.
+- **15:** `scripts/regenerate-openapi.py` equals the render. The cache already has the hook at its URL, but lacks `/api/ui-setup`, so `tsc` and `tests/test_openapi_cache.py` fail until the refresh.
+- **17:** PilotDeploy; `tests/render-chart.py` checks the env. **19:** nothing; the root lint already runs `arch-validate`, and the model exists.
+- The phase 16 hand-off section for slice 002 is still owed (Phases 11–16, PilotApp paragraph).
+
+**Checklist gaps** (not folded into the changelog):
+
+- **Step 3, PilotApp:** "take the template's side of `3f84260`" reads as a conflict to resolve, but `testing_auth.py` and `schemas/testing_auth.py` merge clean and keep the hook, and `sse.py` keeps lines outside its hunks: take the render. `alembic/env.py` and `app/cli.py` also conflict (its standing edits, now the template's): the template's side.
+- **Step 6:** a database app running `ruff format --check` meets `scripts/init-dev-database.py` too.
+- **Step 12:** PilotApp's `package.json` is an unedited render, like DHCPApp's `button.ts`, so nothing arrives with the update.
+- **Steps 3 and 6:** the dev stack needs step 6's `watchdog[watchmedo]` before `Procfile.dev` can run the backend. The phase 15 log says so, but the checklist doesn't.
 
 ## Phases
 
