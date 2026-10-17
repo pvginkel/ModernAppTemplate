@@ -157,7 +157,7 @@ All infrastructure code. Developers should not edit these:
 - `app/utils/` — all utilities
 - `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
 - `run.py` — server entry point
-- `scripts/` — `testing-server.sh`, `dev-watch.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`, `wait-for-services.py`
+- `scripts/` — `testing-server.sh`, `dev-watch.sh`, `check.py`, `init-dev-database.py`, `wait-for-services.py`
 - `Dockerfile` — container build (generated once, `_skip_if_exists`; CI now lives in the root template)
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
 
@@ -342,6 +342,8 @@ A script that generates projects with all key flag combinations and verifies `py
 
 ### PostgreSQL test databases with rollback isolation
 The suites run on PostgreSQL, as production does (SQLite went in 2026-10, see `da_port_decisions.md` S1). Once per run, a session fixture builds a template database with the Alembic revisions, in production's locale, and clones it. One session-scoped app serves every test; each test's session runs on savepoints inside a transaction that is rolled back at teardown, so `commit()` and `rollback()` stay real. Tests whose commits another connection must see get `committed_app`, on a clone of their own. A run's leftover databases are swept by the next run, which skips any still in use. The design is `pilotapp_database_testing_design.md` §4.
+
+Playwright's backends run on the same server. The frontend's global setup builds a seed database with the backend's `load-test-data`, each worker's backend serves a clone of it (`CREATE DATABASE … TEMPLATE`), and global teardown drops the run's databases (`tests/support/helpers/pg-admin.ts`). Its databases are named `<project_name>_e2e_<run id>_…`, pytest's `<database_name>_test_<run id>_…`, so neither suite's sweep touches the other's. A frontend whose backend has no `alembic.ini` (no `use_database`) seeds nothing.
 
 ### Prometheus registry clearing
 Every app the fixtures build clears the Prometheus registry before it is created; without this, collectors that a service registers in its constructor collide with the previous app's. Before the session-scoped app this was an autouse fixture around every test; with a database it is now opt-in (`clear_prometheus_registry`), because clearing after each test would unregister the session app's metrics.

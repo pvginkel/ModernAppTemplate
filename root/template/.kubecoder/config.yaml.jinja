@@ -10,10 +10,10 @@
 {% if use_database %}
 # `postgres` serves the dev stack's database: the backend's default
 # DATABASE_URL points at localhost:5432/{{ database_name }}, and `kc project setup`
-# creates that database and applies the migrations. The backend suite creates
-# its own databases on the same server (TEST_DATABASE_ADMIN_URL) and never
-# touches the dev one. The Playwright harness still seeds a per-worker SQLite
-# file.
+# creates that database and applies the migrations. The backend suite and
+# Playwright (a clone of a seed database per worker) create their own
+# databases on the same server (TEST_DATABASE_ADMIN_URL) and never touch the
+# dev one.
 {% endif %}
 {% if use_s3 %}
 # `s3storage` (RustFS) provides S3 on localhost:9000, credentials
