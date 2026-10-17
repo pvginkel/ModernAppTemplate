@@ -19,12 +19,12 @@
 # `s3storage` (RustFS) provides S3 on localhost:9000, credentials
 # s3storage/s3storage, storage cleared on every start: the backend test fixtures
 # hard-fail when S3_ENDPOINT_URL is unreachable, and create their bucket. CI
-# runs the same RustFS image as a sidecar in the validation Job (Jenkinsfile,
-# "Run validation").
+# runs the same RustFS image as a service of the validation Job (Jenkinsfile,
+# the "Test" stage).
 {% endif %}
 #
 # No imageBuilder: both Dockerfiles are built by Jenkins with
-# helmCharts.kaniko(...), and nothing builds an image from inside this
+# helmCharts.kaniko2(...), and nothing builds an image from inside this
 # environment.
 
 repos:
