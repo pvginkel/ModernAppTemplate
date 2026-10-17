@@ -15,6 +15,7 @@ This page holds the rulings needed to port DesignAssistant's changes into the te
 - **S4. Exception text in 500 responses is shown only where S6 allows it** (BE-C14).
 - **S5. The conventions become a guide on dev-guides.home** (RT08, RT09, RT11, RT13, RT14, BE-T17). The guide's source stays in this repo, since it is tied to the template, and the DevGuides pipeline (`pvginkel/DevGuides`) merges it in, as it does the JenkinsPipelineUtils guide. A skill in KubeCoderConfig points at the site, like the pipelines skill.
 - **S6. One fact decides whether an app exposes internal information**: true when `STAGE` is not `prd`, or when the app is marked `HOMELAB_INTERNAL`. Two things follow it: exception text in 500 responses (S4) and the copy-diagnostics button on error toasts (FE19). The backend hands the fact to the frontend; DA did this through `GET /api/ui-setup`. The template has no `STAGE` today, only `FLASK_ENV`, which reads `production` in every deployed environment, so this needs D9b's `STAGE`. The hobby apps run as `prd` with `HOMELAB_INTERNAL` set. Whether `HOMELAB_INTERNAL` is a copier answer or a deploy setting is settled at design time.
+- **S7. The templates and all six apps move from Poetry to uv in the same push.** FieldnotesApp and PilotApp are already on uv, and their edits are the reference.
 
 ## Ruled (2026-10-17)
 
