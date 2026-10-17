@@ -12,7 +12,9 @@ This page holds the rulings needed to port DesignAssistant's changes into the te
   - A drift test compares the models with the revisions.
 - **S2. The OIDC `redirect_uri` comes from the request's origin**, not `BASEURL`, and redirect parameters must be relative paths (BE-C15).
 - **S3. Builds use the shared `modern-app-backend*` base images and the pnpm build cache** (BE-C17, RT05).
-- **S4. Exception text in 500 responses becomes a setting.** The template default keeps today's behaviour (details shown); a public-facing app turns it off (BE-C14).
+- **S4. Exception text in 500 responses is shown only where S6 allows it** (BE-C14).
+- **S5. The conventions become a guide on dev-guides.home** (RT08, RT09, RT11, RT13, RT14, BE-T17). The guide's source stays in this repo, since it is tied to the template, and the DevGuides pipeline (`pvginkel/DevGuides`) merges it in, as it does the JenkinsPipelineUtils guide. A skill in KubeCoderConfig points at the site, like the pipelines skill.
+- **S6. One fact decides whether an app exposes internal information**: true when `STAGE` is not `prd`, or when the app is marked `HOMELAB_INTERNAL`. Two things follow it: exception text in 500 responses (S4) and the copy-diagnostics button on error toasts (FE19). The backend hands the fact to the frontend; DA did this through `GET /api/ui-setup`. The template has no `STAGE` today, only `FLASK_ENV`, which reads `production` in every deployed environment, so this needs D9b's `STAGE`. The hobby apps run as `prd` with `HOMELAB_INTERNAL` set. Whether `HOMELAB_INTERNAL` is a copier answer or a deploy setting is settled at design time.
 
 ## To rule
 
@@ -73,13 +75,11 @@ DA's health rework (BE-C13, BE-T13) has two parts:
 | FE21 | `button { cursor: pointer }`, readable dark-mode red and blue, and an app-owned CSS hook so apps stop editing `index.css` | Yes |
 | FE28 | Dialogs don't close on a backdrop click (protects half-filled forms) | Yes |
 | FE29 | A loading button keeps its width (spinner overlaid) | Yes |
-| FE19 | A copy-diagnostics button on error toasts; needs a "non-production" signal | Leave |
+| FE19 | A copy-diagnostics button on error toasts, shown where S6 allows it | Yes |
 
 ### D7. Where the conventions go
 
-DA wrote down rules worth keeping: exhaustive status enums, when to toast, UUID paths, background tasks for anything over 2 s, testing against real dependencies, `perf_counter`, and failing fast (RT08, RT09, RT11, RT13, RT14, BE-T17). Per your standing rule, these go into a skill.
-
-**Question:** which home? **Recommendation:** a `modern-app` conventions skill in KubeCoderConfig, next to the other estate skills.
+Settled as S5.
 
 ### D8. Architecture producers
 
@@ -95,7 +95,105 @@ DA published `docs/architecture/architecture.yaml` and validated it in its own J
 - **BE-C29:** restarts through `watchmedo` instead of the Werkzeug reloader. This ends the double-process class of bugs and respects graceful shutdown.
 - **RT07:** a dependency-update checker across components.
 
-These stay in DA until an app needs them: the Celery worker and Beat, email, multi-tenancy, i18n, ICU collations, the RabbitMQ SSE transport, pagination and sorting, S3 presigned URLs, `STAGE` tiers, role hierarchy, coverage tooling, Vitest, route loaders, the code-health grader, the multi-frontend workspace, the memory profiler, the remote suite runner and staged deploys.
+These stay in DA until an app needs them: the Celery worker and Beat, email, multi-tenancy, i18n, ICU collations, the RabbitMQ SSE transport, S3 presigned URLs, coverage tooling, the code-health grader, the multi-frontend workspace and the memory profiler.
+
+Seven more are under consideration; their pros and cons follow.
+
+#### D9a. Pagination and sorting (BE-C27, FE31, RT10)
+
+- **What it is:**
+  - Backend: `apply_sorting()` sorts by a whitelisted column and always adds `id` as a tiebreaker. A base query schema carries `page`, `per_page`, `sort_by` and `sort_dir`, and a meta schema describes the page (39 lines plus the schemas).
+  - Frontend: a `DataTable` on `@tanstack/react-table`, `useServerSort` (which remembers the sort in localStorage), `usePagination`, and a step in `generate-api.js` that emits each endpoint's sortable columns from the OpenAPI spec.
+  - Convention: every list endpoint sorts on the server.
+- **Pros:**
+  - Lists that page are sorted where the data is, so a page boundary never shuffles rows. The `id` tiebreaker alone fixes rows that repeat or vanish between pages, a bug any paged list has without it.
+  - The generated sort config keeps backend and frontend column names in step.
+- **Cons:**
+  - The hobby apps' lists are small enough to sort in the browser. A server-side contract on every list endpoint is real ceremony for them.
+  - `DataTable` brings a dependency and a second table component next to whatever the apps already use.
+  - DA's generator step had DA-specific paths hard-coded in it.
+- **Recommendation: take the backend half only**: `apply_sorting()` with its tiebreaker, plus a "paged lists order stably" rule in the conventions skill. Leave the frontend half until an app has a list that needs paging. ElectronicsInventory is the likely first; the dedup pass will show what it does today.
+
+#### D9b. `STAGE` tiers (BE-C24)
+
+- **What it is:** a `STAGE` setting (`local-dev`, `dev`, `uat`, `prd`, `local-tst`, `tst`) separate from `FLASK_ENV`. DA used it to:
+  - derive defaults (the S3 bucket name, the queue prefix);
+  - guard destructive commands and test endpoints outside `prd`;
+  - report the stage in readyz;
+  - show a stage badge in the top bar, hidden on `prd` (FE32);
+  - gate the toast diagnostics button (FE19).
+- **Pros:**
+  - One answer to "which environment is this?" for the app, its logs and its users.
+  - The badge prevents "I thought this was test" mistakes.
+  - Destructive tooling gets a reliable guard.
+- **Cons:**
+  - Every hobby app has one environment, so today it would always read `prd`. That is fine under S6, which marks them `HOMELAB_INTERNAL` instead.
+  - Six values is more than anyone needs. The `local-*` variants exist for DA's test setup.
+  - Defaults derived from the stage hide configuration that is better stated outright in the deploy values.
+- **Recommendation: take a reduced form, because S6 needs it**: the values `local`, `dev`, `uat` and `prd`, the guards, and readyz reporting the stage, with no derived defaults. The top-bar badge (FE32) then comes nearly free; it stays hidden on `prd`, so the hobby apps never show it.
+
+#### D9c. Role hierarchy (BE-C25)
+
+- **What it is:** the `AuthService` gains `role_hierarchy={"editor": ["portal"]}` on top of the linear read → write → admin chain. It validates the roles, detects cycles and expands the implications (about 100 lines, 24 tests, off by default).
+- **Pros:**
+  - It handles an app with two audiences, such as staff and customers, where staff should also pass the customers' endpoints, without listing both roles on every endpoint.
+  - It is backward compatible, and DA's tests come with it.
+- **Cons:** no app has a second audience, and the linear chain plus `@allow_roles` covers everything they do. It is one more concept in the auth model for someone to understand.
+- **Recommendation: leave.** It is small and easy to lift from DA the day an app gets a second audience.
+
+#### D9d. Vitest (FE24)
+
+- **What it is:** a unit and component test runner next to Playwright: `vitest.config.ts`, jsdom, Testing Library, a `test:unit` script and knip wiring. DA had nine test files in total, mostly pure functions (an error serialiser, markdown and diff logic).
+- **Pros:**
+  - Pure logic such as parsers, formatters and state machines gets tested in milliseconds instead of through a browser.
+  - Edge cases are cheap to enumerate.
+- **Cons:**
+  - A second runner to wire into the suite runner, CI, knip and tsconfig.
+  - Component tests invite the mocking the template's Playwright rules forbid (`no-route-mocks`).
+  - The hobby apps have little pure frontend logic. Even DA, with far more of it, wrote nine files.
+- **Recommendation: leave.** Add it to the app that first has logic worth unit-testing. Promote it to the template if a second app wants it.
+
+#### D9e. Route loaders (FE26)
+
+- **What it is:** each route prefetches its data in a TanStack Router loader, through a query-options factory whose key equals the generated hook's key, so the page renders with its data instead of a spinner. It comes with:
+  - a pending component after 200 ms;
+  - a thin progress bar for slow navigations;
+  - `NotFoundRedirect`, which turns a loader's 404 into a toast and a redirect.
+- **Pros:**
+  - No spinner flash, and no layout jump on detail pages.
+  - Fetching and 404 handling live in one place per route.
+  - Hover prefetch becomes possible.
+- **Cons:**
+  - DA wrote its 14 factories by hand. If a factory's key drifts from the generated hook's key, the page silently fetches twice.
+  - Loaders block navigation, so pending UI becomes mandatory.
+  - It broke the template's ui-state instrumentation. FE08, ported in D1, is the fix.
+  - Every app's routes change.
+- **Recommendation: leave for now.** The template-worthy version generates the query-options factories in `generate-api.js`, so the keys cannot drift. That is template work of its own, and worth doing only when an app's detail pages visibly need it.
+
+#### D9f. Remote suite runner (RT21)
+
+- **What it is:** `run-suite-remote` (534 lines) builds a Kubernetes Job like CI's validation Job, uploads the working tree, runs `run-suite` in the pod, copies the results back and deletes the Job. DA built it because its dev container had no database or browser.
+- **Pros:**
+  - The CI-identical suite runs from a dev session without a push.
+  - It gets more memory and CPU than the dev container.
+  - Several runs can go in parallel.
+- **Cons:**
+  - KubeCoder already provides the sidecars and the browser, so `kc project test` runs the suite locally. DA's reason for building it is gone.
+  - It is a second copy of the Job manifest that the root `Jenkinsfile` and the library's `modernApp.test` generate. The copies drift.
+  - It needs rights to create Jobs. This environment has them only in prd's `development` namespace.
+- **Recommendation: leave.** If dev containers start running out of memory on full Playwright runs, the right home is a `kc` or library feature that reuses `modernApp.test`'s manifest, not per-app Python.
+
+#### D9g. Staged deploys (RT20)
+
+- **What it is in DA:** Build-Main tags images `tst-<n>`. Deploy-UAT retags a chosen build as `uat-<n>` with `crane`, Deploy-PRD retags a UAT build as `prd-<n>`, and each deploys through HelmCharts.
+- **What it would be today:** the template no longer deploys through HelmCharts. The build pins its images in the deploy repo's `config/prd/values.yaml`, and Argo CD syncs that commit (argo-cd D53). A staged version pins into `config/uat/values.yaml` instead, and a promote job copies the pin from `uat` to `prd`. Nothing is retagged, because the image tag already names the build. DA's `crane` approach does not carry over.
+- **So, yes: it is pipeline and deploy work, done per app.** The app needs a second Argo application with its own database, OIDC client redirect URI, S3 bucket, SSE gateway and hostname, all set in the deploy values. The app's code needs nothing, unless it wants the stage visible (D9b).
+- **Pros:** a bad build reaches `uat` first, and production gets exactly the image that was tried.
+- **Cons:**
+  - A second running copy of every service, and its data, per app.
+  - A manual promote step on every release.
+  - For a single-user hobby app, `uat` is mostly the operator clicking through the same thing twice.
+- **Recommendation: per app, not in the template.** Do it for an app whose users would be hurt by a bad deploy. If two apps end up with the same promote job, lift it into the root template or the library then.
 
 ### D10. How the work runs
 
@@ -111,14 +209,15 @@ These stay in DA until an app needs them: the Celery worker and Beat, email, mul
 - **S2:** BE-C15
 - **S3:** BE-C17, RT05
 - **S4:** BE-C14
+- **S5:** RT08, RT09, RT11, RT13, RT14, BE-T17
+- **S6:** BE-C24 (reduced, see D9b), FE19
 - **D1:** all Port items except BE-C01; BE-C16, FE17, FE18, FE20, BE-T14, BE-T15
 - **D2:** BE-C01
 - **D3:** BE-T10, BE-T11, BE-T12, FE15, FE16, FE27
 - **D4:** BE-C12, BE-T09, BE-T16
 - **D5:** BE-C13, BE-T13
-- **D6:** FE19, FE21, FE28, FE29
-- **D7:** RT08, RT09, RT11, RT13, RT14, BE-T17
+- **D6:** FE21, FE28, FE29 (FE19 is S6)
 - **D8:** RT06
-- **D9:** all other Optional items
+- **D9:** all other Optional items; D9a–D9g cover BE-C27, FE31, RT10, BE-C24, BE-C25, FE24, FE26, RT21, RT20
 - **Dedup pass:** RT01–RT04
 - **Skip:** the 15 Skip items, as listed in the inventory
