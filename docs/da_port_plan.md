@@ -58,7 +58,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 1 | uv everywhere, dependency bumps | done 2026-10-17 | backend `5cbec2a`, `7353261`; frontend `f3dfb72`; parent `7b06a55`, `23459f1` |
 | 2 | Backend: PostgreSQL testing | done 2026-10-17 | backend `6a2d04e`, `a29fd98`, `c9fba33`; parent `241d216` |
 | 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
-| 4 | Backend: auth | todo | |
+| 4 | Backend: auth | in progress: steps 1–2 done | backend `7db254c`; parent: the steps 1–2 entry |
 | 5 | Backend: readiness, SSE, small takes | todo | |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | todo | |
 | 7 | Frontend: stages, SSE, defaults | todo | |
@@ -191,6 +191,35 @@ Record the stop in the phase log, and leave the phase `blocked`.
   - `worker-isolation.spec.ts` alone at two workers failed once: worker 0's Vite process exited with code 1 before it was ready, and its backend was fine. It passed on the re-run at a 5,297 MB peak, against the container's 5 GiB limit.
   - The runner writes `test_results.md` details only for a failed step, so a green run shows no counts. `pnpm exec playwright test --list` gives the inventory.
 - **Test gotcha:** don't assert on `spectree_config.api.spec` in the mother suite. Each `create_app()` makes a new SpecTree, and a spec lists only the routes its own instance decorated, which happened at the first app's import. So a later app's spec misses template routes.
+
+### 2026-10-17, phase 4, steps 1–2: role-less callers get 403, one identity path
+
+BE-C01 and BE-C12 with BE-T09 landed in one backend commit (`7db254c`), as the worklist asks, with BE-T05's `resolve_required_role` tests that waited for BE-C01.
+
+- **What the template has now** (`app/utils/auth.py`, `app/api/oidc_hooks.py`, `app/api/auth.py`):
+  - `check_authorization` refuses a caller holding none of `configured_roles` before the per-tier lookup, so also on a GET when `read_role` is unset ("No recognized role -- access denied", 403). `@no_role_check` (attribute `is_no_role_check`) skips every role check; login, callback and logout carry it.
+  - `resolve_auth_identity(token, auth_service, config, testing_service=None)` is the one identity path: a test session (testing mode, `test-session-` prefix, live session), else the local admin when OIDC is off, else the validated JWT, else `None`. It reads neither the request nor `g`.
+  - `authenticate_request(..., *, throw_on_error, testing_service=None)`. `throw_on_error` is keyword-only and required. Tolerant mode (`@public`) returns on an authentication failure without `g.auth_context`. An authorization failure raises in both modes, so a signed-in caller with no role gets 403 on a `@public` endpoint too. `g.clear_auth_cookies` is set only after a failed refresh.
+  - `/api/auth/logout` sets `g.clear_auth_cookies`; `after_request_set_cookies` alone clears the cookies, so a refresh made on the way in can't put them back. `/api/auth/self` reads `g.auth_context` and keeps the forced-error hook.
+  - The hook body is the module-level `authenticate_api_request(auth_service, oidc_client_service, testing_service, config)` in `oidc_hooks.py`, which returns `None` or the 401/403 tuple. The hook only calls it.
+  - Constants `LOCAL_USER_SUBJECT` and `TEST_SESSION_PREFIX` are in `app/utils/auth.py`.
+- **Deviations from DA:**
+  - **Tolerant mode reads the access token from the cookie only,** never the Authorization header. IoTSupport's `/api/iot/*` endpoints are `@public` and validate device JWTs with the same `AuthService` (`app/utils/device_auth.py:94`). In DA's form the hook would validate the device token itself and answer 403 to every device, since devices hold none of the app's roles. FieldnotesApp's client bearer tokens stay the endpoint's business the same way. Throwing mode still reads the header (IoTSupport's `pipeline` tokens). A consequence: `/api/auth/self` no longer accepts a bearer token.
+  - **With OIDC off, every `/api` request carries the local admin in `g.auth_context`** (subject `local-user`), exempt from role checks. DA left it unset, for its `seed_user` only. Before, the template left it unset too. Test sessions under OIDC off are still role-checked, as before.
+  - `/api/auth/self` lost its `hierarchy_roles` check: the hoisted check covers it, with `configured_roles`. A caller holding only an additional role (IoTSupport's `pipeline`) now gets 200 there instead of 403. It could already read every GET.
+- **BE-T09, ported:** `tests/utils/test_resolve_auth_identity.py` and `tests/utils/test_authenticate_request.py` (DA's tolerant, throwing and helper cases, plus the cookie-only and OIDC-off ones); end-to-end cases appended to `tests/api/test_auth_middleware.py` and `test_auth_endpoints.py` (DA's wrapper, `/self` and no-role-check files); hoist and `@no_role_check` cases in `tests/utils/test_auth_utils.py`; BE-T05's seven `resolve_required_role` cases in `tests/services/test_auth_service.py`. `tests/api/conftest.py` adds `roles_oidc_app`/`roles_oidc_client`: `oidc_app` with `write_role="editor"`, `additional_roles=["pipeline"]` and no `read_role`. DA's `test_auth_role_hierarchy.py` waits for BE-C25 (step 5).
+- **For steps 3–5:**
+  - BE-T16: with OIDC on, the caller is `get_auth_context()`; with OIDC off it is now `local-user` on every `/api` request, never `None`. An endpoint that passes the caller's subject to `start_task` records `local-user` under OIDC off, so an owner check can compare subjects the same way in both modes. Tasks with no subject (system tasks, EI's `ai_parts.py` until phase 12) still need the rule.
+  - BE-C15 changes the login, callback and logout bodies; keep `@no_role_check` on all three.
+  - BE-C25: `annotate_openapi_security` is untouched.
+- **For phase 5:** the SSE connect callback (`app/api/sse.py.jinja` `_bind_identity`) still validates the forwarded token by itself and sees no test sessions. BE-T11 can call `resolve_auth_identity` with the token from the forwarded headers. With OIDC off, the caller subject an endpoint passes to `start_task` is now `local-user`, which is also the SSE sentinel binding (correction 7).
+- **What apps must check (phases 11–16):**
+  - D2 lockouts per worklist §5: IoTSupport, DHCPApp, ZigbeeControl, and FieldnotesApp's `GET /api/tasks/<id>/status`.
+  - App-owned `@public` endpoints called from the browser with the session cookie now see the user, and a signed-in user with none of the app's roles gets 403 there. Endpoints called with a bearer token only (IoTSupport's devices, FieldnotesApp's clients) are unaffected.
+  - EI's `tests/test_role_based_access.py` calls `check_authorization` directly: a caller with none of the configured roles now gets "No recognized role" before any per-tier check.
+  - FieldnotesApp's `app/api/oidc_hooks.py` conflicts (phase 15). Its `authenticate()` copy of the old hook body goes. If the FN-38 binding stays, its hook calls `authenticate_api_request(...)` and then binds. An old body kept by mistake fails at its first request, because `throw_on_error` is required. Its `_editor()` (`api/inbox.py:49`) now gets `local-user` with OIDC off instead of `None`.
+  - IoTSupport's `device_log_stream.py` already ignores the caller with OIDC off, so it is unaffected.
+- **Gates:** `kc project build`, `test` (mother 518 → 584, domain 9, root backend suite) and `lint` are green. Playwright passed at one worker (3,302 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (5,343 MB peak).
 
 ## Phases
 
