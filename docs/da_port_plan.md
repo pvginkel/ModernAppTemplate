@@ -69,7 +69,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 12 | App: ElectronicsInventory | done 2026-10-17 | ElectronicsInventory `f28c42a9` (root), `ab85dee9` (backend), `58ad6a13` (frontend), `966ab2a2` (uv), `f599895f`, `ea134e62`, `f99dd9e8`, `44995302`, `e3f56128`, `24facf44`, `c013e345`, `51cd44e6`, `06ecd407`, `013a6643`, `087d77e9`, `aa6c3c8b`, `f4c744a4`, `e5eb245c`, `76a87c48`, `4c7bbd12`, `f08330db`, `0d96e602`, `98d16280`, `e2ab4788`, `49f322ee`, `2273b788`, `f3fb505b`, `0401148c`, `0f306626`, `479e2926`, `d75a14b1`, `f695d15a`, `0badde29`, `4313093a`, `66da139d`, `3e4eef28`, `c506116e`, `52dc77d8`; ElectronicsInventoryDeploy clone `6f7bae7` (not pushed); parent `4bd9b3c`, `d89b609`, `072777c`, `7ecacf8`, `b8aa97c`, `4b13899`, this entry; none pushed |
 | 13 | App: DHCPApp | done 2026-10-17 | DHCPApp `752e0a8` (root), `c57c73c` (backend), `446f9cd` (frontend), `d04ceb9` (uv), `ab9ebbf`, `3fa7ec1`, `3331d7a`, `ff80b81`, `41be6b9`, `214687b`, `78bb6e3`; DnsmasqDeploy clone `ed61025` (not pushed); parent `c3bec09`, `e9ea80d`, `6d91d3c`, `abf711b`, this entry; none pushed |
 | 14 | App: ZigbeeControl | done 2026-10-17 | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv), `43baff0`, `9edbf7a`, `4f6295b`, `12dcfc0`, `6fea457`, `62289c5`, `b937119`, `fda3f8a`, `670761e`; Zigbee2mqttDeploy clone `a9fc082` (not pushed); parent `5451d57`, `37521f3`, `465d3eb`, `f8a9e5b`, this entry; none pushed |
-| 15 | App: FieldnotesApp | todo | |
+| 15 | App: FieldnotesApp | in progress: steps 1–5 done | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`); parent: this entry; none pushed |
 | 16 | App: PilotApp | todo | |
 | 17 | The push | todo | |
 
@@ -953,6 +953,61 @@ Changelog steps 1–19 in `/work/ZigbeeControl`, one commit per step or small gr
 - FieldnotesApp and PilotApp are `use_app_shell=false` too: expect no shell skips, as the no-shell render ships no shell specs.
 - The `modern-app` cgroup's `memory.peak` keeps the high-water mark of earlier runs (it read 5.37 GB before this chunk's), and this kernel (6.8) can't reset it, so sample `memory.current` for a run's peak (`/work/scratch/zc-mem/sample.sh`, run in the container with `cexec modern-app sh`).
 - Phase 13's notes stand: the preview pass through `run-suite`, `--junitxml-dir` for counts, and the deploy repo's render with the downloaded helm on a copy of the chart.
+
+### 2026-10-17, phase 15, steps 1–5: syncs and the template's uv
+
+Changelog steps 1–5 in `/work/FieldnotesApp`, one commit per step plus one for the FN-38 docs. Nothing is pushed. No template change was needed. The tree was clean and level with origin/main (`ff1344c`) at the start. **Checking template-owned files:** the violation finder can't compare the Jinja-rendered ones, so each component was also rendered with FieldnotesApp's answers (`copier copy --data-file`, the answers without the `_` keys, into `/work/scratch/fn-sync/render-{root,backend,frontend}`) and every non-`_skip_if_exists` file compared with `cmp`. After the syncs, every template-owned file equals that render but for backend `.gitignore`'s `.run/` (below).
+
+**Root (`3c767a8`, v0.1.2 → v0.2.0).** Conflicts in `Jenkinsfile`, `Procfile.dev` and `scripts/dev.py`, each resolved to the template's side. `Jenkinsfile` gains only the `env:` lines (`STAGE: 'tst'`, `BUILD_CACHE: 'true'`, their comments); `Procfile.dev`'s backend line runs `scripts/dev-watch.sh`. `tools/suite_runner/local.py` merged clean; `scripts/build-cache-{get,put}.sh` and `scripts/check_updates.py` arrived. App-owned root files untouched.
+
+**Backend (`1d923a0`, v0.13.2 → v0.14.0).** Conflicts in `Dockerfile`, `app/api/oidc_hooks.py`, `pyproject.toml`, `scripts/testing-server.sh` and `tests/test_smoke.py`; clean merges into `app/services/sse_connection_manager.py` (which kept `bind_unbound_identity`), `container.py` and `app_config.py`. No `.env.example.rej`. The update deleted `scripts/dev-server.sh` (nothing else referenced it).
+
+- `oidc_hooks.py` and `sse_connection_manager.py`: the template's render whole (FN-38, below). `testing-server.sh`: the template's side (`uv run dev`), its uv edit being the template's own now.
+- `Dockerfile`: step 14 arrived. The template's base images, keeping `COPY packages`, `COPY mcp-server` and `COPY eval/pyproject.toml` with their comments, `--no-editable` on `uv sync`, and the runtime `apt-get install -y --no-install-recommends git ca-certificates` with its comment (`tini` and `netcat-openbsd` dropped from it: the runtime image has them, and runs as root, so the apt step works). Step 14's precondition stands (DockerImages `7e7c1f7` pushed, images rebuilt).
+- `container.py`: step 7 arrived (`health_service=health_service` on `SSEConnectionManager`; `lifecycle_coordinator` and `health_service` already first, no S3). This merge brought no second `testing_service`: it **moved** the app's provider below `health_service` with the template's reworded comment. Not taken, nor the reworded health-service comment.
+- `app_config.py`: kept as the app's; the clean hunk brought `dump_for_logging()` without `Sensitive` marks, the import and the docstring (step 8 decides).
+- `pyproject.toml`: kept as the app's (the merge dropped the workspace, its members and sources, and the app's dependencies). Step 6's pins and `extend-exclude` were in the hunks, so step 6 is all by hand.
+- `tests/test_smoke.py`: FieldnotesApp has its own (healthz plus the `editor` sign-in gate), which met the template's new one; kept the app's.
+- Unedited renders, so nothing arrived and the step is by hand: `.env.example` (step 11), `tests/conftest.py` (the docstring, which no app took). `vulture_whitelist.py` already equals the render.
+
+**Frontend (`c8504a7`, v0.20.2 → v0.21.0).** Conflicts in `src/contexts/sse-context-provider.tsx` and `src/routes/index.tsx`; `sse-worker.ts` merged clean with its FN-38 edit; `package.json` merged clean. No `.env.example.rej`, no `public/favicon.png` re-created.
+
+- `src/routes/index.tsx`: the app's.
+- `package.json`: step 12's lines arrived (`pg`, `@types/pg`, `generate:api:with-backend`, the `build-fast`/`build` split); it now equals the render (`@playwright/test` was already `1.60.0`, frontend v0.20.3's pin). `pnpm install` added only `pg` and `@types/pg`. `pnpm update eslint-plugin-react-hooks ssegateway` not run (step 12).
+- `src/styles/button.ts`: an unedited render, so step 13 is by hand.
+- `vite.config.ts` merged clean and equals the render.
+
+**FN-38 dropped (correction 10).** Every piece found, and where it went:
+
+- Backend, template-owned: `oidc_hooks.py` (the `X-SSE-Request-Id` binding, `SSE_REQUEST_ID_HEADER` and the nested `authenticate()` copy of the old hook body) and `sse_connection_manager.py` (`bind_unbound_identity`): the template's render.
+- Backend, app-owned: `tests/test_sse_identity.py` deleted. `tests/fieldnotes/test_inbox.py`: `naming()` and the `connection=` parameters go; `test_a_page_whose_connection_is_bound_to_no_one_hears_the_tasks_it_begins` is deleted (the case no longer exists); the reopened-page test (FR-30) and the other-users test (NFR-4) now bind their connections at connect, as the gateway's callback does, and drop the request-binding asserts. With `fieldnotes_service.py`'s `register_readyz` stubbed out in the working tree (step 9, reverted after), `test_inbox.py` passed 60 of 60, and the whole backend suite 584 passed, 4 failed: three `tests/fieldnotes/test_api.py` readyz tests (steps 9 and 10) and `tests/test_openapi_cache.py` (step 15). Unstubbed, every app-building test fails at `health_service.register_readyz` (`AttributeError`) until step 9.
+- Frontend, template-owned: `sse-worker.ts`, `sse-context-provider.tsx` **and `src/lib/utils/random.ts`** (FN-38 P2 made `makeUniqueToken` draw from `crypto.getRandomValues`; the template never changed the file, so the merge kept the edit silently; the worklist's "five template-owned files" counts it): the template's render.
+- Frontend, app-owned: `src/lib/api/sse-connection.ts` (only the header middleware) and `tests/shell/sse-connection.spec.ts` (only the header assertion) deleted. `tests/inbox/inbox.spec.ts`: `posted()` returns the body, the Start and Send asserts drop the header, and the specs still wait for the page's `connected` event.
+- Docs (`72ab23f`): `docs/rest-api.md`'s binding paragraph and `docs/design.md`'s NFR-4 and inbox paragraphs now describe the template's connect-time binding, the 401/403 refusal and the page's refresh and reconnect.
+- Left: nothing in this repo (`git grep` finds no `X-SSE-Request-Id`, `bind_unbound_identity`, `nameSseConnection`, `sse_request_id` or `test_sse_identity`). The spec repo `FieldnotesAppSpecs` (slice 005's records) is not checked out here and was not looked at. NFR-4 still says "a connection's id is unguessable", and the template's `makeUniqueToken` and the worker's inline copy use `Math.random()` (operator item below).
+
+**Step 5 (`9b99389`).** Every uv edit FieldnotesApp had made to template-owned files took the template's side in steps 2–4 (`Jenkinsfile`, `local.py`, `Procfile.dev`, `scripts/dev.py`, `testing-server.sh`; `dev-server.sh` deleted). `CLAUDE.md`: the "one exception" paragraph (uv, `dev-server.sh`) is replaced by the one standing template-owned edit left, backend `.gitignore`'s `.run/` (the eval harness's output, which holds the private dataset's text; never listed before), and the repo-structure line no longer calls the template Poetry. No `poetry` mention is left in the repo. The violation finder: no post-adoption drift; its "missing" lines are the known noise (root `scripts/__pycache__/check_updates.cpython-313.pyc`, backend `scripts/wait-for-services.py`).
+
+**Gate.** `uv lock --check` and `uv sync --locked` green at the root (5 packages) and in `backend/` (81); `uv run run-suite --help` and the backend's `import app, run` work.
+
+**For the later chunks (steps 6–19).**
+
+- **6:** all of it by hand in `backend/pyproject.toml`, which keeps the workspace (`[tool.uv.workspace]`, `[tool.uv.sources]`, the `fieldnotes-*` members) and `pytest-asyncio` (check it against pytest 9). `watchdog[watchmedo]` matters before the gates: `Procfile.dev` now runs `scripts/dev-watch.sh`, so the dev stack's backend fails without it. Root `ruff==0.15.22`. The app's `[tool.ruff.format] exclude` (FN-21) lists the template-owned files the template ships unformatted; the new template files (`app/core_exceptions.py`, `app/api/ui_setup.py`, `app/schemas/ui_setup_schema.py`, `app/utils/http_metrics.py`, `app/utils/log_formatter.py`, `tests/test_openapi_cache.py`) and the changed ones may need adding or removing once ruff 0.15 formats.
+- **7, 14:** arrived; check, don't redo.
+- **8:** `app_config.py` is the app's, without the hunk. `AppSettings` has no fields (FieldnotesApp's settings, its secrets included, live in `app/fieldnotes/config.py`), so the method is safe either way.
+- **9:** `fieldnotes_service.py:78` `register_readyz` → `register_check(..., critical=True)` first, since the app doesn't start without it. `LOG_LEVEL` vs `FIELDNOTES_LOG_LEVEL`; the actioner's system task.
+- **11, 13:** by hand (unedited renders). **12:** only `pnpm update eslint-plugin-react-hooks ssegateway`. **15:** the cache refresh; `tsc` needs the generated client first.
+- **Close:** the parent `CLAUDE.md` downstream-apps row and `docs/downstream_sync_process.md`'s row still say FieldnotesApp is not synced and on uv, not Poetry (phase 1's deferral).
+
+**Changelog checklist gaps** (not edited):
+
+- Step 4, FieldnotesApp: names `sse-worker.ts`, `sse-context-provider.tsx` and the header in `sse-connection.ts`, but FN-38 also edited template-owned `src/lib/utils/random.ts`, which the merge keeps silently, and left app-owned uses: `tests/shell/sse-connection.spec.ts`, `tests/inbox/inbox.spec.ts`, backend `tests/fieldnotes/test_inbox.py`, `docs/rest-api.md`, `docs/design.md`.
+- Step 3: `container.py`'s merge can move the app's `testing_service` instead of adding a second one (FieldnotesApp); neither is to be taken. FieldnotesApp's own `tests/test_smoke.py` conflicts with the template's new one.
+
+**Operator items.**
+
+- **NFR-4's unguessable connection id:** FN-38's CSPRNG token went with the drop; the template's `random.ts` and the worker's inline token use `Math.random()`. If the requirement stands, the fix belongs in the template (`crypto.getRandomValues` in both), not as a FieldnotesApp standing edit.
+- Step 14's precondition, as for the other apps.
 
 ## Phases
 
