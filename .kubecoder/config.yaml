@@ -44,9 +44,11 @@ tools:
 #               when S3 is unreachable (backend/.env.test points here), and so
 #               do the downstream apps' backend suites. Storage is cleared on
 #               every start; the suites create their buckets themselves.
-#   postgres  — the downstream apps' `kc project setup` creates their dev
-#               database and runs `cli upgrade-db` against localhost:5432, so
-#               pod start fails their setup without it. No suite uses it.
+#   postgres  — PostgreSQL on localhost:5432, user and password postgres. The
+#               backend template's suites create their own databases on it
+#               (TEST_DATABASE_ADMIN_URL), and the downstream apps' `kc project
+#               setup` creates their dev database and runs `cli upgrade-db`
+#               against it, so pod start fails their setup without it.
 # No opensearch: only IoTSupport's dev stack reads it, and no setup or suite.
 services:
   - s3storage

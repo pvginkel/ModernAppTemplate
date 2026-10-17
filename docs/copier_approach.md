@@ -157,7 +157,7 @@ All infrastructure code. Developers should not edit these:
 - `app/utils/` — all utilities
 - `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
 - `run.py` — server entry point
-- `scripts/` — `testing-server.sh`, `dev-server.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`
+- `scripts/` — `testing-server.sh`, `dev-server.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`, `wait-for-services.py`
 - `Dockerfile` — container build (generated once, `_skip_if_exists`; CI now lives in the root template)
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
 
@@ -176,7 +176,8 @@ All infrastructure code. Developers should not edit these:
 
 ### Template-maintained test infrastructure
 
-- `tests/conftest_infrastructure.py` — infrastructure fixtures (app factory, client, session, OIDC mocking). Template-owned, overwritten on update. The app's `tests/conftest.py` imports from this.
+- `tests/conftest_infrastructure.py` — infrastructure fixtures (PostgreSQL test databases, app factory, client, session, OIDC mocking). Template-owned, overwritten on update. The app's `tests/conftest.py` imports from this.
+- `tests/test_database_schema.py` — schema tests (`use_database`): the run's database is at the Alembic head, and the models match the revisions. Template-owned.
 
 ---
 
@@ -334,16 +335,16 @@ Hand-written domain files in `test-app-domain/` copied into the generated `test-
 3. `test-app/` is now a complete working app
 
 ### Mother project tests
-Infrastructure tests in `tests/` (outside test-app) validate template infrastructure. They run from inside test-app's uv environment: `cd test-app && uv run pytest ../tests/ -v`. This ensures the generated infrastructure works correctly.
+Infrastructure tests in `tests/` (outside test-app) validate template infrastructure. They run from inside test-app's uv environment: `cd test-app && uv run pytest ../tests/ -v`. This ensures the generated infrastructure works correctly. They run on the template's own fixtures: `tests/conftest_infrastructure.py` is a symlink to test-app's rendered copy.
 
 ### Flag combination validation
 A script that generates projects with all key flag combinations and verifies `py_compile` succeeds on every `.py` file. Catches Jinja rendering errors, missing imports, and dependency issues across all combinations.
 
-### SQLite template cloning for test isolation
-A session-scoped fixture creates a "template" SQLite database, runs migrations once, then each test clones it via `sqlite3.Connection.backup()`. Fast and isolated.
+### PostgreSQL test databases with rollback isolation
+The suites run on PostgreSQL, as production does (SQLite went in 2026-10, see `da_port_decisions.md` S1). Once per run, a session fixture builds a template database with the Alembic revisions, in production's locale, and clones it. One session-scoped app serves every test; each test's session runs on savepoints inside a transaction that is rolled back at teardown, so `commit()` and `rollback()` stay real. Tests whose commits another connection must see get `committed_app`, on a clone of their own. A run's leftover databases are swept by the next run, which skips any still in use. The design is `pilotapp_database_testing_design.md` §4.
 
 ### Prometheus registry clearing
-An autouse fixture clears the Prometheus registry before and after each test. Without this, metric collectors from one test leak into the next.
+Every app the fixtures build clears the Prometheus registry before it is created; without this, collectors that a service registers in its constructor collide with the previous app's. Before the session-scoped app this was an autouse fixture around every test; with a database it is now opt-in (`clear_prometheus_registry`), because clearing after each test would unregister the session app's metrics.
 
 ## What Did Not Work Well
 
@@ -501,6 +502,7 @@ uv run pytest tests/ -v          # Domain tests
 **Tests:**
 - `tests/__init__.py` — empty
 - `tests/conftest_infrastructure.py.jinja` — infrastructure fixtures (template-owned)
+- `tests/test_database_schema.py` — schema tests (template-owned, `use_database`)
 - `tests/conftest.py` — app fixture scaffold (`_skip_if_exists`)
 - `tests/test_smoke.py` — liveness smoke test (`_skip_if_exists`)
 
@@ -517,6 +519,7 @@ uv run pytest tests/ -v          # Domain tests
 - `alembic/script.py.mako`
 - `alembic/versions/.gitkeep`
 - `scripts/init-dev-database.py` — creates the dev database on the Postgres sidecar
+- `scripts/wait-for-services.py` — waits for PostgreSQL (and S3 with `use_s3`) before the suites; the root suite runner calls it
 
 ### `use_oidc` files
 - `app/api/auth.py`

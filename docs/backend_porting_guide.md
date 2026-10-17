@@ -257,26 +257,23 @@ def list_items(
 
 Edit `tests/conftest.py` to add domain fixtures on top of the infrastructure fixtures.
 
-**Key pattern** — override `test_settings` if your tests need different infrastructure config:
+**Key pattern** — override `test_settings` if your tests need different infrastructure config. With `use_database` the app it builds is session-scoped, so the override must be too; leave `database_url` alone, since the fixtures set each app's database:
 
 ```python
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_settings() -> Settings:
-    return Settings(
-        database_url="sqlite:///:memory:",
-        secret_key="test-secret-key",
-        flask_env="development",  # NOT "testing" — gates testing endpoints
-        cors_origins=["http://localhost:3000"],
-        oidc_enabled=False,
-        # ...
-    )
+    return _build_test_settings().model_copy(update={
+        "flask_env": "development",  # NOT "testing" — gates testing endpoints
+    })
 ```
+
+`_build_test_settings` is imported from `tests.conftest_infrastructure` by name (the star import skips underscore names).
 
 **Why `flask_env="development"`?** The template's default `test_settings` uses `flask_env="testing"`, which makes `config.is_testing` true. This disables testing endpoint guards, meaning your regular test client can access testing-only endpoints. If your tests expect testing endpoints to be gated for the regular client, override to `"development"` and create separate `testing_app`/`testing_client` fixtures with `flask_env="testing"`.
 
-Add domain-specific `test_app_settings`:
+Add domain-specific `test_app_settings` (session-scoped with `use_database`; use `tmp_path_factory`, not `tmp_path`):
 ```python
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_app_settings() -> AppSettings:
     return AppSettings(
         mqtt_url="mqtt://localhost",
