@@ -62,7 +62,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | done 2026-10-17 | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`, `d2f6ded`, `f9f9a5b`, `9bd07c9`; backend `b9ac732`, `57427d0`; parent `f38d2f8`, `101033b`, `096f326`, this entry |
 | 7 | Frontend: stages, SSE, defaults | done 2026-10-17 | frontend `ec93ae9`, `13a4c62`, `fcce4fd`, `98375e0`, `678a52a`; parent `2d351fe`, `323bd88`, this entry |
-| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: step 1 done | frontend `f308682`; parent `07fd094`, this entry |
+| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: steps 1–3 done | frontend `f308682`, `b0b1b16`; backend `96ee519`; parent `07fd094`, `8d28f63`, the step entries; DockerImages clone `7e7c1f7` (not pushed) |
 | 9 | Conventions guide and skill | todo | |
 | 10 | Release | todo | |
 | 11 | App: IoTSupport | todo | |
@@ -492,6 +492,77 @@ Frontend `f308682` (the `@preview` tag); parent `07fd094` (the `Jenkinsfile`, th
   - **`worker-isolation.spec.ts` alone at two workers:** passed first time (5,080 MB runner peak), and the preview pass was skipped.
   - **One spec file** (`sse-connectivity.spec.ts`) ran both passes.
   - **A CI-shaped run** (`STAGE=tst BUILD_CACHE=true`, `--output-mode full --junitxml-dir … --retries 2`, one worker, a fresh pnpm store and no `node_modules`): green, with `SUITE_RESULT` backend 9/0/0, frontend 38/0/5 and frontend-preview 5/0/0 (3,650 MB cgroup peak). So `STAGE=tst` changes no outcome of the domain or Playwright suites.
+
+### 2026-10-17, phase 8, steps 2–3: images, dev stack
+
+Backend `96ee519` and frontend `b0b1b16` (step 2); `/work/scratch/DockerImages` `7e7c1f7` (step 2, committed, not pushed); parent `8d28f63` (step 3), this entry.
+
+- **DockerImages `7e7c1f7`, `modern-app-backend-build` (worklist §6.1):**
+  - adds `COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/`, `UV_PYTHON_DOWNLOADS=never` and `UV_LINK_MODE=copy`;
+  - drops `pip install poetry` and the three `POETRY_*` lines; the apt block stays.
+  - **Why 0.13.1:** phase 1 pinned no uv version, and 0.13.1 is what the modern-app toolchain runs and what DevGuides' `Dockerfile` pins. The estate's other images install uv unpinned with the astral installer. This one is pinned per §6.1, so the weekly rebuild doesn't move it.
+  - `modern-app-backend` and `modern-app-frontend-build` are unchanged.
+- **Backend `Dockerfile.jinja` (BE-C17; app-owned, so it reaches new apps only):**
+  - The build stage is `FROM registry:5000/modern-app-backend-build AS build`, with no `ENV`, apt or `pip install uv`.
+  - The runtime stage is `FROM registry:5000/modern-app-backend`, with no apt.
+  - The rest is unchanged.
+  - The runtime image carries libmagic, the image codecs and libpq whatever `use_s3` and `use_database` say. So an app without them gets a slightly larger image, all of it in the shared base layer.
+- **Frontend `Dockerfile.jinja` (template-owned; RT05's image half):**
+  - `FROM registry:5000/modern-app-frontend-build AS build`; the corepack line goes, and `ARG BUILD_CACHE_URL` comes in.
+  - One `RUN` restores and then installs: `STORE="$(pnpm store path)"`, `mkdir -p "$STORE"`, then step 1's one-liner (same key, same default URL) ending in `|| echo "No pnpm store in the build cache"`, then `pnpm install --frozen-lockfile`. Keeping both in one `RUN` puts the store and node_modules' hard links in one layer.
+  - **Deviation from step 1's one-liner:** `mkdir -p`, because `tar -C` needs the directory. DA's `build-cache-get.sh` creates it too.
+  - **pnpm (ruling 7):** the image prepared `pnpm@latest`, but corepack runs what `packageManager` names, so the build runs pnpm 9.0.0. Its store is `/root/.local/share/pnpm/store/v3`: the v3 layout the runner's tarball holds.
+- **What was and wasn't verified (step 2):**
+  - **No image was built.** This environment has no image builder: `kaniko` answers "pod was composed with no image builder". Building would need `imageBuilder: true` in `.kubecoder/config.yaml` and `kc env restart`, which is the operator's call. Not verified: a build of any of the three Dockerfiles, the DockerImages job building the new image, and a kaniko build reaching the build cache (worklist §6.2's reasoning stands). `/uv` and `/uvx` in `ghcr.io/astral-sh/uv:0.13.1` rest on DevGuides' identical line, which builds.
+  - **The frontend `RUN`, simulated.** Its text was taken from the rendered `Dockerfile` and run with dash in the modern-app container, with a clean `HOME` and corepack's shim.
+    - pnpm was 9.0.0, and the store was `…/store/v3`.
+    - **Hit:** a local stand-in served a pnpm 9 store tarball for the root test-app's lockfile (58 MB, key `pnpm-ee6c2573….tgz`). `pnpm install --frozen-lockfile --offline` then succeeded.
+    - **Miss:** a 404, and the real cache's default URL (empty), each printed the miss line and exited 0.
+  - **The backend, reasoned against §6.1's image contents.**
+    - The build image carries every apt package the old build stage installed, under any flags; the runtime image carries every old runtime package.
+    - Both images are on `python:3.13-slim`, so the venv's `/usr/local/bin/python3.13` link resolves in the runtime stage.
+    - `requires-python` is `>=3.13,<4`.
+- **For phase 17 (correction 13):**
+  - Push DockerImages `7e7c1f7` first, let its job rebuild `modern-app-backend-build`, and check that `registry:5000/modern-app-backend-build:latest` has `/bin/uv`. Only then push any app whose backend `Dockerfile` moved.
+  - The frontend move needs no image change.
+  - None of the three images has been rebuilt since 2026-06-17, so the operator should also confirm that a DockerImages build of them runs.
+- **The by-hand backend `Dockerfile` edit, phases 11–16.** No app's `frontend/Dockerfile` has drifted from the template, so `copier update` replaces it cleanly.
+  - **Every app:** the build stage becomes `FROM registry:5000/modern-app-backend-build AS build` and loses its `ENV` lines (`POETRY_*`, `UV_*`, `PYTHON*`), its apt block and `pip install poetry|uv`. The runtime stage becomes `FROM registry:5000/modern-app-backend` and loses its apt block.
+  - **The four Poetry apps** take the uv packaging in the same edit: `COPY pyproject.toml uv.lock /app/` and `RUN uv sync --locked --no-dev --no-install-project`.
+  - **IoTSupport (11):** rewrite it to the template default. Today it has no build-stage apt, copies `COPY run.py alembic.ini ./` style, has one `COPY --from=build /app /app` and no `DATA_PATH`. Its runtime `ENV` sets `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1`; keep them, because the runtime image sets neither.
+  - **ElectronicsInventory (12):** a clean swap. Its `frontend/Dockerfile.docs` (app-owned, `node:lts-slim` plus corepack) may move to `modern-app-frontend-build` too; that is optional.
+  - **DHCPApp (13) and ZigbeeControl (14):** clean swaps.
+  - **FieldnotesApp (15):** keep three things:
+    - the runtime `apt-get install -y --no-install-recommends git ca-certificates`, with its comment;
+    - `COPY packages /app/packages`, `COPY mcp-server /app/mcp-server` and `COPY eval/pyproject.toml /app/eval/pyproject.toml`;
+    - `--no-editable` on `uv sync`.
+  - **PilotApp (16):** a clean swap.
+- **Step 3, `Procfile.dev.jinja` (BE-C29's root half):** the backend line is `cd backend && env -u VIRTUAL_ENV PORT=<backend_port> scripts/dev-watch.sh`. The header now says the backend restarts on a code change, and "Werkzeug auto-reload" is gone.
+- **Step 3, checked in the root test-app with `scripts/dev.py`:**
+  - readyz answered 200 with `"stage": "local-dev"`.
+  - An edit to `backend/app/utils/__init__.py` drained the server (a lifecycle shutdown in `logs/backend.log`) and started a new one under a new PID.
+  - **`scripts/dev.py stop`:** honcho sent SIGTERM to the three services, watchmedo passed it on, and the server logged a graceful shutdown. No honcho, watchmedo, server, vite or gateway process was left.
+  - **The test-app setup is by hand,** because `regen.sh` leaves no venvs, `.env` or node_modules: `uv sync` (root, backend), the `.env` printf from its `project.yaml`, a dev database, `cli upgrade-db` and `pnpm install`.
+- **RT03:** nothing else to take. Per worklist §2, the template's `dev.py`, `dev-sse-gateway.sh` and `regenerate-openapi.py` match or beat DA's, and DA's other scripts are marked leave.
+- **`STAGE` and `HOMELAB_INTERNAL`: not seeded.** This follows phase 3 and deviates from the step's text.
+  - With `STAGE` unset, the dev stack runs `local-dev`: `FLASK_ENV` is unset there, so it is `development` by default, and `local-dev` is D9b's ruled default for that (readyz confirms it).
+  - `HOMELAB_INTERNAL` changes nothing where `STAGE` isn't `prd`.
+  - A seeded `STAGE=local-dev` would pin the stage even when a developer sets `FLASK_ENV=production` to try the `prd` path.
+  - The seed is written only for apps with a database or S3.
+  - The backend's `.env.example` already documents both settings.
+- **Found outside this chunk, for the operator:**
+  - **New-app setup breaks for a hyphenated `project_name`.**
+    - The two templates' `database_name` defaults differ: the root `copier.yml` gives `project_name | replace('-', '_')` (`test_app`), the backend gives `project_name` (`test-app`).
+    - `project.yaml`'s seeded `backend/.env` names the root's. But `scripts/init-dev-database.py` reads `DATABASE_URL` from the process environment only, not from `.env`, so it creates `test-app`.
+    - `cli upgrade-db`, which does read `.env`, then fails with `database "test_app" does not exist`.
+    - Seen in the root test-app. A fix is one default, or the script loading `.env`, or both. The existing apps' `project.yaml` is app-owned, so this hits new apps.
+  - **Harness only:** the root test-app's backend answers carry `sse_gateway_port: 3002`, but its gateway runs on 3001. So its dev-stack readyz reports `sse_gateway` as an error, which is non-critical (`degraded`).
+- **For phase 10:** the changelog takes:
+  - the backend `Dockerfile` default on the two base images (by hand for existing apps, as above);
+  - the frontend `Dockerfile` on `modern-app-frontend-build`, with the build-cache restore and the `BUILD_CACHE_URL` build arg;
+  - `Procfile.dev` on `dev-watch.sh`;
+  - the DockerImages dependency (correction 13).
+- **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green after both steps. No Playwright run was needed: neither step changes what the suite runner or Playwright starts. The second build's `.copier-answers.yml` churn in `backend/` and `frontend/` was discarded.
 
 ## Phases
 
