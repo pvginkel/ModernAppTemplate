@@ -10,3 +10,5 @@ node_modules
 /.pnpm-store
 /test_results.md
 /root/test-app
+/guide/.venv/
+/guide/site/

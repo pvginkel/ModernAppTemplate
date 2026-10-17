@@ -79,3 +79,16 @@ projects:
     #   cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite frontend'
     test: cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite backend'
     lint: cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools'
+
+  guide:
+    description: >-
+      The modern app guide published at https://dev-guides.home/modern-app/ —
+      the conventions every app generated from these templates follows, a
+      Zensical site with llms.txt copies, built and published by the DevGuides
+      hub job.
+    # DevGuides' check_guide.py over the repo (`..` from guide/), from its raw
+    # URL: it builds the guide with its own toolchain
+    # (`uv run --locked zensical build --strict`), checks it against the guide
+    # contract, and runs check_site.py, the guide's own checks. Every guide on
+    # the hub publishes together, so a red guide here blocks all of them.
+    test: cexec modern-app uv run https://raw.githubusercontent.com/pvginkel/DevGuides/main/tools/check_guide.py ..

@@ -1,0 +1,90 @@
+# The modern app guide, published at https://dev-guides.home/modern-app/ by the DevGuides hub job,
+# which builds every guide and serves them under one host: the conventions every app generated
+# from this repo's templates follows, in its backend, its frontend and its tests. The toolchain is
+# Zensical, which reads this MkDocs-format file, locked in pyproject.toml + uv.lock beside it.
+#
+# The build IS the gate: `--strict` turns Zensical's warnings into errors. From this directory:
+#
+#     uv run --locked zensical build --strict
+#
+# `kc project test guide` runs DevGuides' tools/check_guide.py over the repo, which builds the
+# guide, checks it against the guide contract and runs check_site.py, the guide's own checks.
+site_name: Modern apps
+site_description: >-
+  The conventions every modern app follows: the Flask and React apps generated from
+  ModernAppTemplate, in their API, their backend and frontend code, their server-sent events and
+  their tests.
+
+# The hub publishes the guide at this path, one segment under its root. Internal links and asset
+# refs stay relative in the built HTML; what carries the origin is the absolute-URL surfaces:
+# <link rel="canonical">, sitemap.xml and the llms.txt entries.
+site_url: https://dev-guides.home/modern-app/
+
+docs_dir: pages
+
+theme:
+  name: material
+  favicon: assets/favicon.svg
+  # Light or dark follows the reader's system setting, and the toggle in the header overrides it.
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: lucide/sun
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: lucide/moon
+        name: Switch to light mode
+  features:
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  # A rule's heading carries its id as the anchor, `{ #api-1 }`, so a link to a rule survives a
+  # reworded heading. check_site.py holds every rule heading to that form.
+  - attr_list
+  # Syntax-highlighted fenced code blocks.
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - llmstxt:
+      markdown_description: >-
+        Every link below is a page's Markdown copy. llms-full.txt, beside this file, holds every
+        page's Markdown in one file.
+      # llms-full.txt inlines EVERY page's markdown into one file, emitted at the site root next to
+      # llms.txt.
+      full_output: llms-full.txt
+      sections:
+        Docs:
+          # fnmatch, not pathlib globbing — `*` crosses `/`, so this single pattern matches every
+          # page at any depth. Keep it that way: a page NOT matched by a `sections` pattern is
+          # absent from llms.txt and llms-full.txt, and --strict stays green. check_guide.py is
+          # what fails on it.
+          - "*.md"
+
+# A link to a missing page, or to a `#fragment` its target does not hold, fails the strict build,
+# on the same page and across pages. Zensical reads only these two of MkDocs' validation keys; a
+# page missing from the nav and a root-absolute link are check_guide.py's to fail.
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+
+# Add a page and its nav row in the SAME change: check_guide.py fails on a page missing from the
+# nav. The first row links the guide back to the hub's index.
+nav:
+  - Dev guides: https://dev-guides.home/
+  - Home: index.md
+  - API: api.md
+  - Status values: status.md
+  - Backend code: backend.md
+  - Readiness: readiness.md
+  - Server-sent events: sse.md
+  - Frontend code: frontend.md
+  - Testing: testing.md
+  - Playwright: playwright.md

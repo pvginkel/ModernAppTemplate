@@ -15,6 +15,7 @@ ModernAppTemplate/                  # Parent repo (you are here) — also the ro
 │   ├── change_workflow.md          # How to make template changes
 │   ├── downstream_sync_process.md  # How to keep apps in sync
 │   └── backend_porting_guide.md    # How to port a backend app onto the template
+├── guide/                          # Source of the modern app guide, https://dev-guides.home/modern-app/ (`kc project test guide` checks it)
 ├── root/                           # Root template source and test-app
 │   ├── template/                   # Copier template source
 │   ├── regen.sh                    # Root regeneration script (run after backend/frontend regens)

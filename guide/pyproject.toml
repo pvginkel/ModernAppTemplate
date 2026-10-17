@@ -1,0 +1,13 @@
+# The guide's toolchain — Zensical, which reads mkdocs.yml beside it — locked in uv.lock, so
+# every `uv run --locked` / `uv sync --locked` installs the same versions.
+# A virtual project (`package = false`): the site is not a Python package.
+[project]
+name = "modern-app-template-guide"
+version = "0"
+requires-python = ">=3.13"
+dependencies = [
+    "zensical>=0.0.70",
+]
+
+[tool.uv]
+package = false
