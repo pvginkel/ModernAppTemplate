@@ -179,7 +179,7 @@ The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered 
 - A signed-in user with none of the app's roles gets 403 everywhere, `@public` endpoints called with the session cookie and the SSE connect included. No current user is locked out (operator ruling).
 - With OIDC on, a refused SSE connect shows the "Connection to the server was lost" toast or sends the user to login, and never retries in a loop.
 - A backdrop click no longer closes a dialog.
-- Pages render before the SSE stream is ready. A spec that expects an SSE-delivered update right after `page.goto` calls `deploymentSse.ensureConnected()` first (ZigbeeControl's `tab-manager.spec.ts` is the one candidate found).
+- Pages render before the SSE stream is ready. A spec that expects an SSE-delivered update right after `page.goto` calls `deploymentSse.ensureConnected()` first (ZigbeeControl's `tab-manager.spec.ts` was the one candidate found, and passes unchanged: its backend resends each tab's status to every new connection).
 - Shell apps show the stage badge wherever the stage isn't `prd`, the dev stack and CI included. With `HOMELAB_INTERNAL=true`, deployed apps show the copy-diagnostics button and the exception text in 500 responses.
 - An oversized body answers 413, not 500.
 - Readyz has the new body, and can answer 200 `degraded`.
