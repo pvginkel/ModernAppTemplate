@@ -59,7 +59,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 2 | Backend: PostgreSQL testing | done 2026-10-17 | backend `6a2d04e`, `a29fd98`, `c9fba33`; parent `241d216` |
 | 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
 | 4 | Backend: auth | done 2026-10-17 | backend `7db254c`, `997ea1f`, `c3b8607`, `a84795a`; frontend `fbf00f9`; parent `e2064d4`, `670d8d8`, this entry |
-| 5 | Backend: readiness, SSE, small takes | in progress: step 1 done | backend `f129198`; parent: this entry |
+| 5 | Backend: readiness, SSE, small takes | in progress: step 1 and BE-T10, BE-T11 done | backend `f129198`, `b224b4f`; parent `d4dc992`, this entry |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | todo | |
 | 7 | Frontend: stages, SSE, defaults | todo | |
 | 8 | Root: CI, images, dev stack, architecture, tooling | todo | |
@@ -259,6 +259,72 @@ Backend `f129198` (D5: BE-C13, BE-T13, and BE-T14's S3 check tests). The root an
 - **For phase 10:** the changelog takes the format change above, `register_readyz`/`register_healthz` → `register_check`, and the container edit.
 - **Tests:** `tests/test_health_service.py` is new (24), with DA's registration, caching, isolation, shutdown, metrics, healthz and drain cases, plus critical against non-critical, `disabled`, timeouts, joined runs and uncached failures. `tests/test_health_api.py` is rewritten for the new body: database, SSE gateway and S3 through the session app, behind a fixture that sets aside checks other tests registered and clears the cache. BE-T14's check tests are `TestReadinessCheck` in `tests/test_s3_service.py` (4); the SSE manager's are in `tests/test_sse_connection_manager.py` (4).
 - **Gates:** `kc project build`, `test` (mother 656 → 690, domain 9, root backend suite) and `lint` are green. Playwright passed at one worker (3,338 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (5,283 MB peak).
+
+### 2026-10-17, phase 5, BE-T10 and BE-T11: SSE targets, connect callback
+
+Backend `b224b4f` (BE-T10 and BE-T11 together: the callback decides who is the local admin, and the targets depend on it). Corrections 6, 7 and 10 applied. The frontend and root templates are unchanged.
+
+- **The `send_event` signature change** (`app/services/sse_connection_manager.py`):
+  - Before: `send_event(request_id: str | None, event_data, event_name, service_type, target_subject: str | None = None)`. `None` broadcast to every connection; `target_subject` narrowed a broadcast to that subject plus every connection bound to the string `"local-user"`.
+  - Now: `send_event(target: Target, event_data, event_name, service_type)`. There is no default and no `target_subject`. A request ID or `None` raises `TypeError`, so an old call fails loudly instead of misdelivering, and mypy flags every old call site.
+  - The targets: `Target.connection(request_id)` (that connection); `Target.subject(subject)` (connections bound to that subject, plus the local admin's); `LOCAL_ADMIN_TARGET` (the local admin's connections only, so nobody with OIDC on); `BROADCAST_TARGET` (every connection, for infrastructure events only). `Target` is a frozen dataclass `(kind, value)`; the factories refuse an empty value, and there is no `Target.broadcast`.
+  - The local admin is a flag on the binding: `bind_identity(request_id, subject, *, local_admin=False)`. The connect callback sets it for the local admin (OIDC off, no test session), and nothing else does. A connection bound to the subject `"local-user"` without the flag (a JWT with that `sub` under OIDC on) is an ordinary subject. This is the SSE form of `_caller_owns` in `api/tasks.py.jinja`.
+  - `on_connect` clears the request ID's binding when a connection replaces another; a disconnect and a gateway 404 clear it too (the 404 path used to leave `_identity_map` behind).
+- **Task events go to the caller** (`app/services/task_service.py`). `task_event_target(caller_subject)` gives `Target.subject(caller_subject)`, or `LOCAL_ADMIN_TARGET` for a task without a subject (correction 7: nobody with OIDC on, the local admin with OIDC off). `TaskProgressHandle(task_id, manager, target)` takes a required target, and `_broadcast_task_event` is now `_send_task_event(event, target)`. `start_task` still takes only `caller_subject`, so the task's owner (`TaskInfo.subject`) and its event target never differ. `/api/testing/tasks/start` sits outside `api_bp`, so its tasks have no subject: the mother integration tests receive them as the local admin, with OIDC off.
+- **The other senders:** `FrontendVersionService` sends `Target.connection(request_id)` on connect and `BROADCAST_TARGET` from `queue_version_event`; `/api/testing/sse/task-event` sends `Target.connection(request_id)`.
+- **The connect callback** (`app/api/sse.py.jinja`, started from PilotApp's `3f84260`). Order: callback secret (production), payload and `request_id` checks, then the testing hook, then the identity, then `on_connect` and `bind_identity`. So a refused connect is never registered, never counted in the connection metrics, and never reaches the `on_connect` observers.
+  - The identity: `resolve_auth_identity(token, auth_service, settings, testing_service)` on the forwarded headers' token (Authorization header first, then the access-token cookie). A missing token under OIDC on, or an `AuthenticationException` (expired, bad signature, issuer, audience), answers 401 `{"error": "Unauthorized"}`. Other exceptions are a 500, as in the API.
+  - The role check: `check_authorization(auth_context, auth_service, "GET")`, the rule the API applies to a GET. A caller with none of the configured roles, or one without the read role where the app sets `read_role`, gets 403 `{"error": "Forbidden"}`. The local admin skips the check; a test session is checked under OIDC off too (phase 4's rule).
+  - The hook: `POST /api/testing/sse/force-callback-error?status=401|403` answers 204 and makes the next connect callback refuse with that status, whoever connects. It is single-shot, class-level state on `TestingService` (`set_/consume_forced_sse_callback_error`), consumed only when `settings.is_testing`. Any other status answers 400.
+  - With `use_oidc=false` (no app has it), every connection is the local admin's.
+- **Deviations:**
+  - **From DA:** the target is required, where DA took `Target | None` with `None` meaning nobody. `LOCAL_ADMIN_TARGET` replaces DA's `Target.role("editor")` fallback. `Target.role`, `Target.workspace_events`, routing keys and `serialize`/`deserialize` are AMQP-only and not taken.
+  - **From the worklist's BE-T11 note** ("replace `editor` with `configured_roles`"): the callback uses `check_authorization` for a GET. That adds the read tier; without a `read_role` it is the same rule.
+  - **From PilotApp:** the hook endpoint is in `api/testing_sse.py` (rendered with `use_sse`), with `ForceSSECallbackErrorQuerySchema` in `schemas/testing_sse.py`, and not in `testing_auth.py` (rendered with `use_oidc`). The URL and behaviour are PilotApp's. PilotApp's callback refused a caller with no configured role even when the app configures none; the template's accepts it, as the API does.
+  - **Pre-existing, left alone:** `api/testing_sse.py` imports `app.utils.auth`, which `use_oidc=false` excludes, so `use_sse` without `use_oidc` doesn't import. No app has that combination.
+- **MAT-10:** both halves are closed in the template. Under OIDC on, no connection is registered without a valid token and a role, and a task without a subject sends to nobody. The card can close once phase 12 makes EI pass `caller_subject`.
+- **What each app must change (phases 11–16):**
+  - **Every app:** every direct `send_event` call needs a `Target`. Choosing `BROADCAST_TARGET` for a domain event is the app's call; it keeps today's behaviour, but the rule (phase 9) is to broadcast only infrastructure events.
+  - **IoTSupport (11):**
+    - `services/device_log_stream_service.py:297` `send_event(request_id, ...)` → `Target.connection(request_id)`.
+    - `services/rotation_nudge_service.py:56` `send_event(None, {}, ...)` → `BROADCAST_TARGET`, or a narrower target.
+    - Tests: `tests/services/test_device_log_stream_service.py:156-258` reads the request ID from `call[0][0]` (now a `Target`), and `tests/services/test_rotation_nudge_service.py:34-62` asserts the old call.
+    - `tests/api/test_device_log_stream.py` binds `"local-user"` without the flag. That is harmless, since the device log stream compares `get_connection_info().subject`.
+  - **ElectronicsInventory (12):**
+    - `app/api/ai_parts.py:124,258` must pass `caller_subject` (the caller's `get_auth_context().subject`). Otherwise, with OIDC on, the AI analysis progress and results reach nobody (correction 7).
+    - Tests `tests/test_utils_api.py:68-90` and `tests/api/test_testing.py:168-240` assert `args[0] is None` for the version broadcast; that becomes `== BROADCAST_TARGET`.
+  - **DHCPApp (13):** `api/internal.py:50` `send_event(None, event_data, "data_changed", "dhcp")` → `BROADCAST_TARGET`, or a narrower target. Test `tests/test_internal_api.py:26-35` asserts `call_args[0][0] is None`.
+  - **ZigbeeControl (14):** `services/tab_status_service.py:34` `send_event(None, ...)` → `BROADCAST_TARGET`, and `:40` `send_event(request_id, ...)` → `Target.connection(request_id)`. Tests: `tests/services/test_tab_status_service.py:42,57,74-81`.
+  - **FieldnotesApp (15):**
+    - The actioner's system task (`fieldnotes/actioner.py:491`, no subject) used to broadcast; now its events go to nobody under OIDC on. Its "explicit target" (correction 7) can only be a subject passed as `caller_subject`, since `start_task` takes no target; or nobody is right for a system task.
+    - `inbox.py:522,554,671` already pass subjects.
+    - `tests/fieldnotes/test_inbox.py:105` fakes `send_event` with the old signature `(request_id, event_data, event_name, service_type, target_subject=None)`. Its `_send_event_to_token` patches (`:940-960`) still fit, since that signature is unchanged.
+    - **The FN-38 binding (correction 10):** `bind_unbound_identity` in FieldnotesApp's copy of `sse_connection_manager.py` and the `X-SSE-Request-Id` binding in `app/api/oidc_hooks.py`, with `tests/test_sse_identity.py`.
+      - It bound connections that the old callback left unbound because their token had expired or was missing. The callback now refuses those with 401 instead, and FE16 (phase 7) makes the frontend refresh the session and reconnect. So once FieldnotesApp has FE16, a connection under OIDC on is never unbound, and the binding is redundant: phase 15 drops it.
+      - If it is kept, its manager method conflicts with the rewritten manager on `copier update`. It must bind without `local_admin`, and it would rebind a reconnect, because `on_connect` now clears the binding.
+  - **PilotApp (16):**
+    - Take the template's side of `3f84260` in `app/api/sse.py`, `app/services/testing_service.py`, `app/api/testing_auth.py` and `app/schemas/testing_auth.py`. The last two lose PilotApp's hook endpoint and `ForceSSECallbackErrorQuerySchema`, which now live in `testing_sse.py` and `schemas/testing_sse.py` at the same URL.
+    - Regenerate the frontend's OpenAPI cache.
+    - `tests/test_sse_callback.py` largely duplicates the template's `tests/api/test_sse_callback.py`: drop it, or keep only Pilot-specific role cases.
+- **For phase 7 (FE16):**
+  - The hook endpoint exists and behaves as PilotApp's frontend spec expects.
+  - The Playwright backend runs with OIDC off and no configured roles, so its test sessions are never refused, and its connect path is unchanged.
+  - The frontend template's `test-app-domain/openapi-cache/openapi.json` lacks the new endpoint. Regenerate it if a generated hook is wanted.
+- **For phase 9 (BE-T17):** the targeting rules to write:
+  - every send names a `Target`;
+  - `BROADCAST_TARGET` is for infrastructure events only;
+  - task events go to the task's owner, with no fallback chain;
+  - a connection sees every subject's events only as the local admin (OIDC off).
+- **For the BE-T12 chunk:**
+  - Keep `Target.connection(request_id)` for the on-connect send and `BROADCAST_TARGET` for `queue_version_event`. `tests/services/test_frontend_version_service.py` gained `TestQueueVersionEvent` (1 test).
+  - The callback runs the `on_connect` observers before `bind_identity`, so an observer can target only the connection.
+  - `check_readiness()` and the `sse_gateway` check registration are untouched.
+- **For phase 10:** the changelog takes the signature change, `bind_identity`'s `local_admin`, the callback's 401/403, the hook endpoint, and that a task without a subject no longer broadcasts.
+- **Tests:**
+  - `tests/api/test_sse_callback.py` is new (33 with parameters): OIDC on (401 and 403 cases, cookie and bearer, additional role, test sessions, a `local-user` JWT is not the local admin), the read role, OIDC off (the local admin, role-checked test sessions, a stale session token), delivery through the callback's binding (MAT-10), the hook (both statuses, the local admin, single-shot, the endpoint, rejected statuses, ignored outside testing mode), and disconnect.
+  - `tests/test_sse_connection_manager.py`: `TestTarget`, `TestSendEvent` and `TestLocalAdminBinding` replace the broadcast and `target_subject` classes; `TestReadinessCheck` is unchanged.
+  - Correction 6's two tests are inverted as `test_task_events_never_broadcast_when_no_subject` and `test_progress_handle_has_no_default_target`, plus `TestTaskEventTarget`.
+- **Gates:** `kc project build`, `test` (mother 690 → 744, domain 9, root backend suite) and `lint` are green. Playwright passed at one worker (3,400 MB peak), and `worker-isolation.spec.ts` (`tests/e2e/parallel/`) alone at two workers passed first time (5,372 MB peak).
 
 ## Phases
 
