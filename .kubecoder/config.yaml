@@ -22,6 +22,8 @@ repos:
     path: DHCPApp
   - url: https://github.com/pvginkel/ZigbeeControl
     path: ZigbeeControl
+  - url: https://github.com/pvginkel/FieldnotesApp
+    path: FieldnotesApp
 
 capabilities:
   github: rw
