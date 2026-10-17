@@ -16,7 +16,9 @@ This page holds the rulings needed to port DesignAssistant's changes into the te
 - **S5. The conventions become a guide on dev-guides.home** (RT08, RT09, RT11, RT13, RT14, BE-T17). The guide's source stays in this repo, since it is tied to the template, and the DevGuides pipeline (`pvginkel/DevGuides`) merges it in, as it does the JenkinsPipelineUtils guide. A skill in KubeCoderConfig points at the site, like the pipelines skill.
 - **S6. One fact decides whether an app exposes internal information**: true when `STAGE` is not `prd`, or when the app is marked `HOMELAB_INTERNAL`. Two things follow it: exception text in 500 responses (S4) and the copy-diagnostics button on error toasts (FE19). The backend hands the fact to the frontend; DA did this through `GET /api/ui-setup`. The template has no `STAGE` today, only `FLASK_ENV`, which reads `production` in every deployed environment, so this needs D9b's `STAGE`. The hobby apps run as `prd` with `HOMELAB_INTERNAL` set. Whether `HOMELAB_INTERNAL` is a copier answer or a deploy setting is settled at design time.
 
-## To rule
+## Ruled (2026-10-17)
+
+Every recommendation below was accepted, except D9b and D9c, which were changed as written there. The delivery plan is [`da_port_plan.md`](da_port_plan.md).
 
 ### D1. Port the small fixes as one batch
 
@@ -48,7 +50,7 @@ The bundle has five parts:
 
 **Recommendation: yes.** All five apps run OIDC with SSE, and an expired session today leaves a dead stream. Two costs:
 
-- It depends on an SSEGateway release that emits `ready` and `rejected` for the HTTP-callback transport. DA tied these to its RabbitMQ transport, so this needs checking and possibly gateway work.
+- It needs no gateway work. The stable SSEGateway, which the template already pins, sends `ready` without RabbitMQ, and turns a 400/401/403 from the connect callback into an in-stream `rejected` event.
 - Typed targets change every `send_event` call site in the apps.
 
 Take the non-blocking `SseGate` (FE27) with it. Waiting for `ready` makes the blank page DA hit more likely while the gateway is slow or down.
@@ -130,7 +132,14 @@ Seven more are under consideration; their pros and cons follow.
   - Every hobby app has one environment, so today it would always read `prd`. That is fine under S6, which marks them `HOMELAB_INTERNAL` instead.
   - Six values is more than anyone needs. The `local-*` variants exist for DA's test setup.
   - Defaults derived from the stage hide configuration that is better stated outright in the deploy values.
-- **Recommendation: take a reduced form, because S6 needs it**: the values `local`, `dev`, `uat` and `prd`, the guards, and readyz reporting the stage, with no derived defaults. The top-bar badge (FE32) then comes nearly free; it stays hidden on `prd`, so the hobby apps never show it.
+- **Ruling: take DA's version.** The operator's next app runs at least `dev` and `prd`, besides `local-dev` and `local-tst`. Taken:
+  - all six values, and the `Stage` wrapper with `is_local()` and `is_env()`;
+  - readyz reporting the stage;
+  - the local-stage skip for the version broadcast;
+  - guards on destructive commands and test-only endpoints on `prd`;
+  - the top-bar badge (FE32), hidden on `prd`.
+- **Default when unset:** `prd` under a production `FLASK_ENV`, `local-tst` under testing, and `local-dev` in development. A deployment that forgets `STAGE` therefore exposes nothing (S6). The CI validation Job sets `tst`.
+- **Left out:** defaults derived from the stage, such as DA's per-stage S3 bucket name. Existing apps run on fixed bucket names, and a derived default would quietly move them to a new bucket.
 
 #### D9c. Role hierarchy (BE-C25)
 
@@ -139,7 +148,7 @@ Seven more are under consideration; their pros and cons follow.
   - It handles an app with two audiences, such as staff and customers, where staff should also pass the customers' endpoints, without listing both roles on every endpoint.
   - It is backward compatible, and DA's tests come with it.
 - **Cons:** no app has a second audience, and the linear chain plus `@allow_roles` covers everything they do. It is one more concept in the auth model for someone to understand.
-- **Recommendation: leave.** It is small and easy to lift from DA the day an app gets a second audience.
+- **Ruling: take it.** It is backward compatible (off by default), and nobody comes back to DA for it later.
 
 #### D9d. Vitest (FE24)
 
@@ -197,11 +206,7 @@ Seven more are under consideration; their pros and cons follow.
 
 ### D10. How the work runs
 
-**Recommendation:**
-
-1. A dedup pass checks the selected items against the current template and the five apps. Some have landed already: PilotApp's write-up shows the template already has `after_commit()`.
-2. The D1 batch becomes one straightforward-changes handover.
-3. PostgreSQL testing (S1), the SSE bundle (D3), the auth refactor (D2 and D4) and readiness (D5) become four separate pieces of work, in that order. Each goes through the template change workflow and then `copier update` in every app.
+Replaced by the operator's ruling: everything ships in one push. See [`da_port_plan.md`](da_port_plan.md).
 
 ## Mapping
 
