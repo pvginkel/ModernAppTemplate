@@ -157,7 +157,7 @@ All infrastructure code. Developers should not edit these:
 - `app/utils/` — all utilities
 - `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
 - `run.py` — server entry point
-- `scripts/` — `testing-server.sh`, `dev-server.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`, `wait-for-services.py`
+- `scripts/` — `testing-server.sh`, `dev-watch.sh`, `check.py`, `initialize-sqlite-database.sh`, `init-dev-database.py`, `wait-for-services.py`
 - `Dockerfile` — container build (generated once, `_skip_if_exists`; CI now lives in the root template)
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
 
@@ -458,6 +458,7 @@ uv run pytest tests/ -v          # Domain tests
 - `app/app_config.py` — app settings scaffold (`_skip_if_exists`)
 - `app/startup.py` — hook implementations scaffold (`_skip_if_exists`)
 - `app/exceptions.py` — base exceptions scaffold (`_skip_if_exists`)
+- `app/core_exceptions.py` — exception classes template code handles that existing apps' `exceptions.py` may lack (`ExternalServiceException`, 502); template-owned
 
 **API:**
 - `app/api/__init__.py.jinja` — API blueprint (Jinja: OIDC hook registration)
@@ -513,6 +514,7 @@ uv run pytest tests/ -v          # Domain tests
 - `app/services/diagnostics_service.py`
 - `app/utils/pool_diagnostics.py`
 - `app/utils/empty_string_normalization.py`
+- `app/utils/pagination.py` — `apply_sorting()` (whitelisted column, then `id` as a tiebreaker) and `build_pagination_meta()`
 - `app/utils/after_commit.py` — `after_commit(callback)` runs a callback only after the request's transaction commits — the extension point for post-commit side effects
 - `alembic.ini.jinja`
 - `alembic/env.py`
