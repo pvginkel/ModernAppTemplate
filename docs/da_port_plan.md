@@ -62,7 +62,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
 | 6 | Frontend: fixes, Playwright on PostgreSQL | done 2026-10-17 | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`, `540430c`, `3824500`, `3ac2cdf`, `cbe04b4`, `d2f6ded`, `f9f9a5b`, `9bd07c9`; backend `b9ac732`, `57427d0`; parent `f38d2f8`, `101033b`, `096f326`, this entry |
 | 7 | Frontend: stages, SSE, defaults | done 2026-10-17 | frontend `ec93ae9`, `13a4c62`, `fcce4fd`, `98375e0`, `678a52a`; parent `2d351fe`, `323bd88`, this entry |
-| 8 | Root: CI, images, dev stack, architecture, tooling | in progress: steps 1–6 done | frontend `f308682`, `b0b1b16`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, the step entries; DockerImages clone `7e7c1f7` (not pushed) |
+| 8 | Root: CI, images, dev stack, architecture, tooling | done 2026-10-17 | frontend `f308682`, `b0b1b16`, `0b87bad`; backend `96ee519`, `332a431`, `40cd8da`; parent `07fd094`, `8d28f63`, `0d3f7a7`, `953bbf5`, `67601c2`, `3f43ff2`, `2ea8724`, `33c6bae`, `2d5bfe8`, `13611f4`, this entry; DockerImages clone `7e7c1f7` (not pushed) |
 | 9 | Conventions guide and skill | todo | |
 | 10 | Release | todo | |
 | 11 | App: IoTSupport | todo | |
@@ -441,198 +441,156 @@ Frontend `ec93ae9` (FE19 and FE32, with the OpenAPI refresh and knip), `13a4c62`
   - **PilotApp (16):** take the template's side of `8b8cf41` in `sse-worker.ts`, `sse-context-provider.tsx` and `playwright-binding.d.ts`. The bridge is renamed, and PilotApp's specs don't use it. Its `tests/infrastructure/sse/sse-connect-refusal.spec.ts` is not a template file, and copier leaves it alone. It opens a bare EventSource, so FE15 doesn't affect it, and its role cases are Pilot's own: keep it or drop it.
 - **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green. Lint's one warning, the unused `eslint-disable` in the SSE provider, predates phase 6. The Playwright suite at one worker passed 38 with 5 skipped (3,177 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (4,540 MB peak). Two edits to the fetch error's text came after `test` and the Playwright runs; `build`, whose frontend `pnpm run build` runs `check`, passed after them. The peaks are sampled from the modern-app container's cgroup each second, because `--output-mode full`, which prints the counts, drops the runner's peak line. Steps 1 and 2 ran the same gates green: Playwright at one worker passed 35 with 2 skipped (3,243 MB) after step 1, and 38 with 5 skipped (3,316 MB) after step 2, and the isolation spec at two workers passed first time (5,081 and 4,691 MB). Step 2's preview pass at one worker, with the two commands in `frontend/CLAUDE.md`, passed 43 with none skipped, and `root/test-app/frontend/dist` was rebuilt plain afterwards; before the `USE_SHARED_WORKER` fix it failed exactly the three SharedWorker cases, at the path check.
 
-### 2026-10-17, phase 8, step 1: CI
+### 2026-10-17, phase 8: root CI, images, dev stack, architecture, tooling
 
-Frontend `f308682` (the `@preview` tag); parent `07fd094` (the `Jenkinsfile`, the suite runner, the build-cache scripts, docs), this entry.
+Frontend `f308682` (the `@preview` tag), `b0b1b16` (step 2) and `0b87bad` (ruling 6); backend `96ee519` (step 2), `332a431` (the `database_name` fix) and `40cd8da` (MAT-12 part 2); parent `07fd094` (step 1), `8d28f63` (step 3), `0d3f7a7` (step 4), `953bbf5` (step 5), `67601c2` (step 6), `3f43ff2` (MAT-12's docs), `2ea8724` (ruling 6), `33c6bae`, `2d5bfe8` and `13611f4` (the step entries this one replaces), this entry; `/work/scratch/DockerImages` `7e7c1f7` (step 2, committed, **not pushed**).
+
+**Step 1, CI.**
 
 - **`Jenkinsfile.jinja`** is PilotApp's declarative file (correction 2), with:
   - the uv strings: `install: 'uv sync --locked --no-dev'`, `run: 'uv run --no-sync'`;
-  - `services:` holding `[name: 'postgres', image: 'postgres:18-trixie', env: [POSTGRES_PASSWORD: 'postgres']]` under `use_database` and today's RustFS sidecar under `use_s3`, and `services: []` with neither;
+  - `services:` holding `[name: 'postgres', image: 'postgres:18-trixie', env: [POSTGRES_PASSWORD: 'postgres']]` (no `resources`) under `use_database` and today's RustFS sidecar under `use_s3`, and `services: []` with neither;
   - `env:` holding `STAGE: 'tst'`, `BUILD_CACHE: 'true'` and, under `use_s3`, the four `S3_*` values (bucket `<project_name>-validation`);
   - the comments: the wait for the services, the PostgreSQL sidecar, and ElectronicsInventory's S3 comment, word for word.
 
-  No `resources` on the postgres service. The header's first paragraph goes through Jinja's `wordwrap(97)`, which reproduces the hand-moved headers of PilotApp, FieldnotesApp, IoTSupport and ZigbeeControl exactly.
-- **Checks:**
-  - The controller's declarative linter (`pipeline-model-converter/validate`, with `JENKINS_TOKEN`) accepted three renders: the root test-app (database and S3), S3 only, and neither.
-  - Rendered with PilotApp's answers minus the database, the file differs from PilotApp's `Jenkinsfile` only in `env:`.
-  - `modernApp.test` stringifies every `env` value and counts a JUnit stem `frontend-*` under the `frontend` suite.
-  - No Jenkins run was possible.
-- **What each app's `Jenkinsfile` meets at its sync (phases 11–16).** The old render is the scripted file, so `copier update` conflicts across the file. Resolve to the app's file plus the template's new lines. Every app gains `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments. The four Poetry apps also move to the uv strings.
+  The header's first paragraph goes through Jinja's `wordwrap(97)`, which reproduces the hand-moved headers of PilotApp, FieldnotesApp, IoTSupport and ZigbeeControl exactly.
+- **Checked:** the controller's declarative linter (`pipeline-model-converter/validate`, with `JENKINS_TOKEN`) accepted three renders: the root test-app (database and S3), S3 only, and neither. Rendered with PilotApp's answers minus the database, the file differs from PilotApp's only in `env:`. `modernApp.test` stringifies every `env` value and counts a JUnit stem `frontend-*` under the `frontend` suite. No Jenkins run was possible.
+- **Build cache (RT05, correction 4):**
+  - `run-suite --build-cache` is on by default when `BUILD_CACHE=true`. `scripts/build-cache-get.sh` and `-put.sh` are template-owned copies of `HomelabAppsDeploy/jenkins/chart/scripts/`, byte for byte, run with `sh`.
+  - The runner restores the pnpm store (`pnpm store path`, run in `frontend/`) before the install. It uploads after a miss, and only when the `--frozen-lockfile` install succeeded. A failed get or put is not a step result.
+  - **Key:** `pnpm-<sha256 of frontend/pnpm-lock.yaml>.tgz`, one fixed prefix for every app. The tarball is relative to the store path (`…/v3` under pnpm 9).
+  - **Tested** against a local stand-in server (`BUILD_CACHE_URL`), not the real cache. A miss uploaded 58 MB for the root test-app; the next run restored it in 1 s and installed in 1 s.
+- **The preview pass (correction 12): a second, preview-only pass, not DA's single preview run.**
+  - **Why:** DA's way would drop the dev-server path from CI, and from every local suite run too. That path is the one developers and `pnpm playwright test` use, and the one FE12's SSE proxy and the `?__sharedWorker` handling live on. A whole second pass would double Playwright time, against `modernApp.test`'s fixed 3,600 s deadline, for apps with large suites. So the second pass runs only the specs that need a production build, and the image build stays plain.
+  - **Selection** is by a Playwright tag. The five SharedWorker cases carry `@preview` (frontend `f308682`): a `{ tag }` on the SharedWorker `describe` in `sse-auth-recovery.spec.ts`, and on the two tests in `sse-connectivity.spec.ts`. They keep their skip guard.
+  - **The runner,** after the dev-server pass, lists `--grep @preview` within the selected specs (`--list --pass-with-no-tests`). If any are selected, it runs `VITE_TEST_MODE=true pnpm build`, then Playwright with `--grep @preview` and `PLAYWRIGHT_PREVIEW_MODE=true`, into `frontend-preview.xml`. With none selected, as for the worker-isolation spec alone, it skips the pass. It clears both variables for the plain build and the dev-server pass, and leaves `dist/` a test-mode build, which `.dockerignore` keeps out of the image.
+  - **Cost** in the root test-app: 16 s of build and 8 s of tests. The JUnit report lists the five twice: skipped in `frontend.xml`, passed in `frontend-preview.xml`.
+  - **Deviation:** the plan put the change in `local.py.jinja` alone; the tag is a frontend template change.
+- **Docs:** `docs/copier_approach.md` (the `Jenkinsfile` line, the build-cache scripts), `CLAUDE.md`'s `use_database` row, `copier.yml`'s `use_database` help, and the `@preview` convention in `frontend/CLAUDE.md`'s Playwright section.
+
+**Step 2, images (S3).**
+
+- **DockerImages `7e7c1f7`, `modern-app-backend-build` (worklist §6.1):** adds `COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/`, `UV_PYTHON_DOWNLOADS=never` and `UV_LINK_MODE=copy`, and drops `pip install poetry` and the three `POETRY_*` lines; the apt block stays. `modern-app-backend` and `modern-app-frontend-build` are unchanged.
+  - **Why 0.13.1:** phase 1 pinned no uv version, and 0.13.1 is what the modern-app toolchain runs and what DevGuides' `Dockerfile` pins. The estate's other images install uv unpinned with the astral installer. This one is pinned per §6.1, so the weekly rebuild doesn't move it.
+- **Backend `Dockerfile.jinja` (BE-C17; app-owned, so it reaches new apps only):** the build stage is `FROM registry:5000/modern-app-backend-build AS build`, with no `ENV`, apt or `pip install uv`; the runtime stage is `FROM registry:5000/modern-app-backend`, with no apt; the rest is unchanged. The runtime image carries libmagic, the image codecs and libpq whatever `use_s3` and `use_database` say, so an app without them gets a slightly larger image, all of it in the shared base layer.
+- **Frontend `Dockerfile.jinja` (template-owned; RT05's image half):** `FROM registry:5000/modern-app-frontend-build AS build`; the corepack line goes, and `ARG BUILD_CACHE_URL` comes in.
+  - After `COPY package.json pnpm-lock.yaml`, one `RUN` restores and then installs: `STORE="$(pnpm store path)"`, `mkdir -p "$STORE"`, then `curl -sSf "${BUILD_CACHE_URL:-http://build-cache.jenkins-prd.svc.cluster.local}/pnpm-$(sha256sum pnpm-lock.yaml | cut -d' ' -f1).tgz" | tar -xzf - -C "$STORE"` (the runner's key) ending in `|| echo "No pnpm store in the build cache"`, then `pnpm install --frozen-lockfile`. One `RUN` puts the store and node_modules' hard links in one layer.
+  - **Deviation:** the `mkdir -p`, because `tar -C` needs the directory. DA's `build-cache-get.sh` creates it too.
+  - **pnpm (ruling 7):** the image prepared `pnpm@latest`, but corepack runs what `packageManager` names, so the build runs pnpm 9.0.0. Its store is `/root/.local/share/pnpm/store/v3`: the v3 layout the runner's tarball holds.
+- **Not verified: no image was built.** This environment has no image builder: `kaniko` answers "pod was composed with no image builder". Building would need `imageBuilder: true` in `.kubecoder/config.yaml` and `kc env restart`, which is the operator's call. So a build of any of the three Dockerfiles, the DockerImages job building the new image, and a kaniko build reaching the build cache are unverified (worklist §6.2's reasoning stands). `/uv` and `/uvx` in `ghcr.io/astral-sh/uv:0.13.1` rest on DevGuides' identical line, which builds.
+- **The frontend `RUN`, simulated:** its text, taken from the rendered `Dockerfile`, ran with dash in the modern-app container, with a clean `HOME` and corepack's shim. pnpm was 9.0.0 and the store `…/store/v3`. On a hit (a local stand-in serving a pnpm 9 store tarball for the root test-app's lockfile: 58 MB, key `pnpm-ee6c2573….tgz`), `pnpm install --frozen-lockfile --offline` succeeded. On a miss (a 404, and the real cache's default URL, empty), it printed the miss line and exited 0.
+- **The backend, reasoned against §6.1's image contents:** the build image carries every apt package the old build stage installed, under any flags, and the runtime image every old runtime package. Both images are on `python:3.13-slim`, so the venv's `/usr/local/bin/python3.13` link resolves in the runtime stage. `requires-python` is `>=3.13,<4`.
+
+**Step 3, dev stack.**
+
+- **`Procfile.dev.jinja` (BE-C29's root half):** the backend line is `cd backend && env -u VIRTUAL_ENV PORT=<backend_port> scripts/dev-watch.sh`. The header now says the backend restarts on a code change, and "Werkzeug auto-reload" is gone.
+- **Checked in the root test-app with `scripts/dev.py`:** readyz answered 200 with `"stage": "local-dev"`. An edit to `backend/app/utils/__init__.py` drained the server (a lifecycle shutdown in `logs/backend.log`) and started a new one under a new PID. On `scripts/dev.py stop`, honcho sent SIGTERM to the three services, watchmedo passed it on, and the server logged a graceful shutdown; no honcho, watchmedo, server, vite or gateway process was left. The setup was by hand, because `regen.sh` leaves no venvs, `.env` or node_modules: `uv sync` (root, backend), the `.env` printf from its `project.yaml`, a dev database, `cli upgrade-db` and `pnpm install`.
+- **RT03:** nothing else to take. Per worklist §2, the template's `dev.py`, `dev-sse-gateway.sh` and `regenerate-openapi.py` match or beat DA's, and DA's other scripts are marked leave.
+- **`STAGE` and `HOMELAB_INTERNAL` are not seeded.** This follows phase 3 and deviates from the step's text.
+  - With `STAGE` unset, the dev stack runs `local-dev`: `FLASK_ENV` is unset there, so it is `development` by default, and `local-dev` is D9b's ruled default for that (readyz confirms it).
+  - `HOMELAB_INTERNAL` changes nothing where `STAGE` isn't `prd`.
+  - A seeded `STAGE=local-dev` would pin the stage even when a developer sets `FLASK_ENV=production` to try the `prd` path.
+  - The seed is written only for apps with a database or S3, and the backend's `.env.example` already documents both settings.
+
+**Step 4, the architecture producer (D8, RT06; correction 1 and operator answer 3 applied).**
+
+- **`Jenkinsfile.architecture.jinja`** (new) is the pipeline guide's app-architecture reference file, with `repo_name` and `github_owner` filled in. Its header goes through `wordwrap(97)` like the `Jenkinsfile`'s. It is `_skip_if_exists` in the root `copier.yml`; all six apps have the file, so `copier update` leaves it alone.
+  - **Checked:** the root test-app's render is the guide's reference file and PilotApp's file with the names swapped. Rendered for FieldnotesApp, it matches that app's file byte for byte. The controller's declarative linter accepts it. No Jenkins run was possible.
+- **No `scripts/arch-validate.py` and no model.** The validator ships in `aac-tools`, and the template ships no `docs/architecture/` (worklist §6.5).
+- **The generated `CLAUDE.md`:** the repo-structure line names `Jenkinsfile.architecture`. A new "Architecture model" section says the model is kept current centrally (`tooling/fleet.py update` in `pvginkel/Architecture`), and that nothing runs from the app after a change. While `docs/architecture/` holds no model, the agent nudges the operator to seed it, in order: `/seed-architecture`, in a clone that `python3 tooling/fleet.py stage <Repo>` stages; push the model; then the operator creates `AaC/<Repo>` from the guide's `config.xml` and adds the `pipeline-producers.yaml` entry.
+- **`.kubecoder/config.yaml.jinja`** gains the `aac-tools` toolchain. The root `lint` in **`project.yaml.jinja`** runs `cexec aac-tools arch-validate docs/architecture/*.yaml`, behind an `if ls docs/architecture/*.yaml` guard that prints a pointer to `CLAUDE.md` while there is no model, so a new app's `kc project lint` is green before seeding. The guard was checked by hand both ways; `arch-validate` itself didn't run, because this environment has no `aac-tools`.
+- `CLAUDE.md` and `.kubecoder/*` are app-owned, so all of this reaches new apps only.
+
+**Step 5, the dependency checker (RT07):** template-owned `scripts/check_updates.py`, stdlib only, run as `cexec modern-app python3 scripts/check_updates.py [--json]`, with no `pyproject.toml` entry (worklist RT04 row). It keeps DA's file name, unlike the template's hyphenated scripts.
+
+- **Discovery:** a directory with a `uv.lock` (and a `pyproject.toml`) is a Python component; a workspace's members come through its root's lock, labelled `backend (python, <member>)`. A directory with a `package.json` is an npm component. Hidden directories, `node_modules`, `test-app`, `dist`, `build`, `logs` and `test-results` are pruned.
+- **Deviation from the worklist's RT07 note:** Python uses `uv tree --outdated --depth 1 --frozen` (text, parsed), not `uv pip list --outdated`. It lists direct dependencies only, with their dependency groups, at their locked versions, and needs no venv. npm stays on DA's `pnpm outdated --format json`, which needs `node_modules`; without them the component is a warning.
+- **Output:** a component that fails is a warning on stderr, and the exit is 0. DA's major/minor/patch tables and `--json` are kept.
+- **Checked** in the root test-app, and read-only against FieldnotesApp (four workspace members and a frontend; 47 updates).
+
+**Step 6, the rest of the root diff:** nothing more to take. Worklist §2's takes have all landed: RT01's wait helpers are phase 2's `backend/scripts/wait-for-services.py`, the test-mode env is step 1's preview pass, RT02 is step 1, and RT04's RT07 is step 5 and its `CLAUDE.md` section step 4. The commit fixes two comments in `.kubecoder/config.yaml.jinja` that step 1 made stale: the RustFS service runs in the `Jenkinsfile`'s "Test" stage (there is no "Run validation" stage), and the images are built with `helmCharts.kaniko2`. DA's `test_process.py` stays out (worklist: leave, unless the operator wants a root test gate).
+
+**MAT-12, part 2:** template-owned backend `tests/test_openapi_cache.py`. **MAT-12 is closed** (Done, Resolved), citing frontend `98375e0`, backend `40cd8da` and parent `3f43ff2`.
+
+- **How it works:** it builds the app in a subprocess (`create_app(skip_background_services=True)` and the Flask test client), because Spectree documents only a process's first app. It writes the document to a file, compares it with `../frontend/openapi-cache/openapi.json` as parsed JSON, and on a mismatch fails naming the added, removed and changed paths and `scripts/regenerate-openapi.py --frontend`. It skips where no frontend sits beside the backend, as in `backend/test-app`: the domain suite now reports 9 passed and 1 skipped.
+- It runs in the suite runner's backend suite, so in CI. **Checked** in the root test-app: it passes on the committed cache, and fails on a doctored one naming all three kinds of change.
+- The generated `CLAUDE.md` mentions the test, and `copier_approach.md` lists it.
+
+**The hyphenated-`project_name` setup bug, found in step 3 and fixed at both causes (backend `332a431`).**
+
+- **The bug:** the two templates' `database_name` defaults differed: the root's was `project_name | replace('-', '_')` (`test_app`), the backend's `project_name` (`test-app`). `project.yaml`'s seeded `backend/.env` names the root's, but `scripts/init-dev-database.py` read `DATABASE_URL` from the process environment only, so it created `test-app`, and `cli upgrade-db`, which does read `.env`, failed with `database "test_app" does not exist`. It hit new apps only: the existing apps' `project.yaml` is app-owned.
+- **The fix:** the backend's `database_name` now defaults to the root's `project_name | replace('-', '_')`, and `scripts/init-dev-database.py` (template-owned) loads `backend/.env` with `load_dotenv` before it reads `DATABASE_URL`, as `wait-for-services.py` does. The environment still wins.
+- **Checked in the root test-app,** after dropping the harness's stale dev databases `test-app` and `test_app`: `kc project setup backend` created `test_app` and `cli upgrade-db` migrated it; a `.env` naming another database made the script create that one; a `DATABASE_URL` in the environment won over `.env`.
+- **No app needs a by-hand edit.** Every app's backend answers record `database_name`, so the new default changes no render. The three database apps' two answers already agree (ElectronicsInventory `electronics_inventory`, IoTSupport `iotsupport`, PilotApp `pilot`); DHCPApp, ZigbeeControl and FieldnotesApp have no database. The script change arrives with the update.
+
+**Ruling 6, the no-shell test-app** (frontend `0b87bad`, parent `2ea8724`).
+
+- **`frontend/regen.sh`** renders two test-apps: `test-app` (`use_app_shell=true`) and `test-app-no-shell` (`use_app_shell=false`). Every other answer is the same, so a diff between the two is the flag's effect; `use_oidc` and `use_sse` are true, as in all three no-shell apps (ZigbeeControl and PilotApp checked). `bash regen.sh` renders both; `bash regen.sh <name>…` only those named.
+- **The domain copies** for the no-shell render skip `sidebar-nav.ts`, `tests/infrastructure/shell/{navigation,mobile-menu}.spec.ts` and `auth-shell-home.spec.ts`, as phase 7 found; the render keeps an empty `tests/infrastructure/shell/`. **No template fix was needed:** the variant passed `pnpm run build` and `pnpm run check` on its first render.
+- **Gitignored, not tracked** (a new `frontend/.gitignore`): nothing copies or runs it, since `root/regen.sh` takes `test-app` alone, and its `package.json` and `pnpm-lock.yaml` are byte-identical to `test-app`'s. Tracking it would add some 200 files and repeat `test-app`'s regen churn on every template commit, with no reader for it.
+- **knip and the ignore:** knip reads every `.gitignore` from its directory up to the git root, so under `frontend/.gitignore` it saw no files and reported every dependency unused. So `regen.sh` makes a gitignored test-app a git repo of its own and commits the render before the install. knip then stops at the render's own root and reads only its `.gitignore`, as in an app, and `vite.config.ts` gets the HEAD it stamps into `version.json` (an empty repo printed a `git rev-parse HEAD` stack trace).
+- **Cost:** the variant's regen takes about 5 s. Its install links from the environment's shared pnpm store (`pnpm_config_store_dir`, `/work/.pnpm-store`, on the same filesystem as `/work`) in 4 s.
+- **`project.yaml`:** `setup` regenerates each frontend test-app that was never generated here (`regen.sh test-app`, `regen.sh test-app-no-shell`, each keyed on its gitignored `routeTree.gen.ts`), so an existing pod gains the variant without churning `test-app`; checked by deleting the variant and running `kc project setup frontend`. `build` and `lint` run `pnpm run build` and `pnpm run check` in both. No Playwright run for the variant (ruling 6).
+- **Docs:** `CLAUDE.md` (Quick Start, "Validating both templates"), `frontend/CLAUDE.md` (structure, rules 1–4, a `use_app_shell` row in the flag table), `docs/copier_approach.md` (tree, validation) and the `project.yaml` comments. `docs/change_workflow.md` describes only the backend test-app, so it is unchanged.
+- **Seen, not fixed:** both frontend test-apps' `eslint` warn (not error) of an unused `eslint-disable` directive for `react-hooks/set-state-in-effect` at `src/contexts/sse-context-provider.tsx:441`, a template file.
+
+**What apps meet in phases 11–16.**
+
+- **The `Jenkinsfile`.** The old render is the scripted file, so `copier update` conflicts across the file. Resolve to the app's file plus the template's new lines. Every app gains `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments. The four Poetry apps also move to the uv strings.
   - **IoTSupport (11):** gains the postgres service. It keeps its `withVault` wrapper, the opensearch service, the Keycloak env and `secrets:`.
   - **ElectronicsInventory (12):** gains the postgres service. It keeps the docs-image stage and its three-image header. Its S3 block already matches.
   - **DHCPApp (13):** keeps `Job: Dnsmasq/DHCPApp` and its own header wrapping. Its pin key `dhcpapp_ui` is its answer, so it renders.
   - **ZigbeeControl (14):** keeps its "No data sidecars" comment.
   - **FieldnotesApp (15):** gains only the `env:` lines.
   - **PilotApp (16):** gains the postgres service and the comments above `modernApp.test`.
-- **Build cache (RT05, correction 4).**
-  - **Switch and scripts:** `run-suite --build-cache` is on by default when `BUILD_CACHE=true`. `scripts/build-cache-get.sh` and `-put.sh` are template-owned copies of `HomelabAppsDeploy/jenkins/chart/scripts/`, byte for byte, run with `sh`.
-  - **Restore and upload:** the runner restores the pnpm store (`pnpm store path`, run in `frontend/`) before the install. It uploads after a miss, and only when the `--frozen-lockfile` install succeeded. A failed get or put is not a step result.
-  - **Key:** `pnpm-<sha256 of frontend/pnpm-lock.yaml>.tgz`, with one fixed prefix for every app. The tarball is relative to the store path (`…/v3` under pnpm 9).
-  - **Tested** against a local stand-in server (`BUILD_CACHE_URL`), not the real cache. A miss uploaded 58 MB for the root test-app; the next run restored it in 1 s and installed in 1 s.
-  - **For step 2:** the frontend `Dockerfile`'s restore must use the same key and the same pnpm major as the store it reads: `curl -sSf "${BUILD_CACHE_URL:-http://build-cache.jenkins-prd.svc.cluster.local}/pnpm-$(sha256sum pnpm-lock.yaml | cut -d' ' -f1).tgz" | tar -xzf - -C "$(pnpm store path)" || true`, after `COPY package.json pnpm-lock.yaml` and before `pnpm install`.
-- **The preview pass (correction 12): a second, preview-only pass, not DA's single preview run.**
-  - **Why:** DA's way would drop the dev-server path from CI, and from every local suite run too. That path is the one developers and `pnpm playwright test` use, and the one FE12's SSE proxy and the `?__sharedWorker` handling live on. A whole second pass would double Playwright time, against `modernApp.test`'s fixed 3,600 s deadline, for apps with large suites. So the second pass runs only the specs that need a production build, and the image build stays plain.
-  - **How it selects:** by a Playwright tag. The five SharedWorker cases carry `@preview` (frontend `f308682`): a `{ tag }` on the SharedWorker `describe` in `sse-auth-recovery.spec.ts`, and on the two tests in `sse-connectivity.spec.ts`. They keep their skip guard.
-  - **What the runner does:** after the dev-server pass, it lists `--grep @preview` within the selected specs (`--list --pass-with-no-tests`). If any are selected, it runs `VITE_TEST_MODE=true pnpm build`, then Playwright with `--grep @preview` and `PLAYWRIGHT_PREVIEW_MODE=true`, into `frontend-preview.xml`. It skips the pass when none are selected, as for the worker-isolation spec alone. It clears both variables for the plain build and the dev-server pass, and leaves `dist/` a test-mode build, which `.dockerignore` keeps out of the image.
-  - **Cost** in the root test-app: 16 s of build and 8 s of tests.
-  - **The JUnit report** lists the five twice: skipped in `frontend.xml`, passed in `frontend-preview.xml`.
-  - **Deviation:** the plan put the change in `local.py.jinja` alone; the tag is a frontend template change.
-  - **For phase 9 (RT13):** the convention is that a spec needing a production build skips without `PLAYWRIGHT_PREVIEW_MODE=true` and carries `@preview`. `frontend/CLAUDE.md`'s Playwright section says so.
-  - **For phases 11–16:** no app has its own spec that gates on `PLAYWRIGHT_PREVIEW_MODE` today. The template's SSE specs arrive tagged.
-- **Docs:** `docs/copier_approach.md` (the `Jenkinsfile` line and the build-cache scripts), `CLAUDE.md`'s `use_database` row, and `copier.yml`'s `use_database` help.
-- **For phase 10:** the changelog takes:
-  - the new `Jenkinsfile`, with the per-app resolutions above;
-  - `scripts/build-cache-*.sh`, `--build-cache` and `BUILD_CACHE`;
-  - the preview pass and the `@preview` tag;
-  - `STAGE=tst` in CI.
-- **Still open, for the operator or phase 9 (worklist §4.3):** after this step, JenkinsPipelineUtils' `docs/pages/types/modern-app.md`, which says files follow "the reference file below, not the template", and the jenkins-pipelines skill's "two files predate the guide" paragraph (KubeCoderConfig) are stale.
-- **Gates:**
-  - `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green.
-  - **Playwright through the runner at one worker:** 38 passed and 5 skipped on the dev server, then the preview pass passed 5 (runner peaks 3,254 and 1,297 MB; the cgroup peak was 3,536 MB).
-  - **`worker-isolation.spec.ts` alone at two workers:** passed first time (5,080 MB runner peak), and the preview pass was skipped.
-  - **One spec file** (`sse-connectivity.spec.ts`) ran both passes.
-  - **A CI-shaped run** (`STAGE=tst BUILD_CACHE=true`, `--output-mode full --junitxml-dir … --retries 2`, one worker, a fresh pnpm store and no `node_modules`): green, with `SUITE_RESULT` backend 9/0/0, frontend 38/0/5 and frontend-preview 5/0/0 (3,650 MB cgroup peak). So `STAGE=tst` changes no outcome of the domain or Playwright suites.
-
-### 2026-10-17, phase 8, steps 2–3: images, dev stack
-
-Backend `96ee519` and frontend `b0b1b16` (step 2); `/work/scratch/DockerImages` `7e7c1f7` (step 2, committed, not pushed); parent `8d28f63` (step 3), this entry.
-
-- **DockerImages `7e7c1f7`, `modern-app-backend-build` (worklist §6.1):**
-  - adds `COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/`, `UV_PYTHON_DOWNLOADS=never` and `UV_LINK_MODE=copy`;
-  - drops `pip install poetry` and the three `POETRY_*` lines; the apt block stays.
-  - **Why 0.13.1:** phase 1 pinned no uv version, and 0.13.1 is what the modern-app toolchain runs and what DevGuides' `Dockerfile` pins. The estate's other images install uv unpinned with the astral installer. This one is pinned per §6.1, so the weekly rebuild doesn't move it.
-  - `modern-app-backend` and `modern-app-frontend-build` are unchanged.
-- **Backend `Dockerfile.jinja` (BE-C17; app-owned, so it reaches new apps only):**
-  - The build stage is `FROM registry:5000/modern-app-backend-build AS build`, with no `ENV`, apt or `pip install uv`.
-  - The runtime stage is `FROM registry:5000/modern-app-backend`, with no apt.
-  - The rest is unchanged.
-  - The runtime image carries libmagic, the image codecs and libpq whatever `use_s3` and `use_database` say. So an app without them gets a slightly larger image, all of it in the shared base layer.
-- **Frontend `Dockerfile.jinja` (template-owned; RT05's image half):**
-  - `FROM registry:5000/modern-app-frontend-build AS build`; the corepack line goes, and `ARG BUILD_CACHE_URL` comes in.
-  - One `RUN` restores and then installs: `STORE="$(pnpm store path)"`, `mkdir -p "$STORE"`, then step 1's one-liner (same key, same default URL) ending in `|| echo "No pnpm store in the build cache"`, then `pnpm install --frozen-lockfile`. Keeping both in one `RUN` puts the store and node_modules' hard links in one layer.
-  - **Deviation from step 1's one-liner:** `mkdir -p`, because `tar -C` needs the directory. DA's `build-cache-get.sh` creates it too.
-  - **pnpm (ruling 7):** the image prepared `pnpm@latest`, but corepack runs what `packageManager` names, so the build runs pnpm 9.0.0. Its store is `/root/.local/share/pnpm/store/v3`: the v3 layout the runner's tarball holds.
-- **What was and wasn't verified (step 2):**
-  - **No image was built.** This environment has no image builder: `kaniko` answers "pod was composed with no image builder". Building would need `imageBuilder: true` in `.kubecoder/config.yaml` and `kc env restart`, which is the operator's call. Not verified: a build of any of the three Dockerfiles, the DockerImages job building the new image, and a kaniko build reaching the build cache (worklist §6.2's reasoning stands). `/uv` and `/uvx` in `ghcr.io/astral-sh/uv:0.13.1` rest on DevGuides' identical line, which builds.
-  - **The frontend `RUN`, simulated.** Its text was taken from the rendered `Dockerfile` and run with dash in the modern-app container, with a clean `HOME` and corepack's shim.
-    - pnpm was 9.0.0, and the store was `…/store/v3`.
-    - **Hit:** a local stand-in served a pnpm 9 store tarball for the root test-app's lockfile (58 MB, key `pnpm-ee6c2573….tgz`). `pnpm install --frozen-lockfile --offline` then succeeded.
-    - **Miss:** a 404, and the real cache's default URL (empty), each printed the miss line and exited 0.
-  - **The backend, reasoned against §6.1's image contents.**
-    - The build image carries every apt package the old build stage installed, under any flags; the runtime image carries every old runtime package.
-    - Both images are on `python:3.13-slim`, so the venv's `/usr/local/bin/python3.13` link resolves in the runtime stage.
-    - `requires-python` is `>=3.13,<4`.
-- **For phase 17 (correction 13):**
-  - Push DockerImages `7e7c1f7` first, let its job rebuild `modern-app-backend-build`, and check that `registry:5000/modern-app-backend-build:latest` has `/bin/uv`. Only then push any app whose backend `Dockerfile` moved.
-  - The frontend move needs no image change.
-  - None of the three images has been rebuilt since 2026-06-17, so the operator should also confirm that a DockerImages build of them runs.
-- **The by-hand backend `Dockerfile` edit, phases 11–16.** No app's `frontend/Dockerfile` has drifted from the template, so `copier update` replaces it cleanly.
+- **The by-hand backend `Dockerfile` edit.** No app's `frontend/Dockerfile` has drifted from the template, so `copier update` replaces it cleanly.
   - **Every app:** the build stage becomes `FROM registry:5000/modern-app-backend-build AS build` and loses its `ENV` lines (`POETRY_*`, `UV_*`, `PYTHON*`), its apt block and `pip install poetry|uv`. The runtime stage becomes `FROM registry:5000/modern-app-backend` and loses its apt block.
   - **The four Poetry apps** take the uv packaging in the same edit: `COPY pyproject.toml uv.lock /app/` and `RUN uv sync --locked --no-dev --no-install-project`.
   - **IoTSupport (11):** rewrite it to the template default. Today it has no build-stage apt, copies `COPY run.py alembic.ini ./` style, has one `COPY --from=build /app /app` and no `DATA_PATH`. Its runtime `ENV` sets `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1`; keep them, because the runtime image sets neither.
   - **ElectronicsInventory (12):** a clean swap. Its `frontend/Dockerfile.docs` (app-owned, `node:lts-slim` plus corepack) may move to `modern-app-frontend-build` too; that is optional.
-  - **DHCPApp (13) and ZigbeeControl (14):** clean swaps.
-  - **FieldnotesApp (15):** keep three things:
-    - the runtime `apt-get install -y --no-install-recommends git ca-certificates`, with its comment;
-    - `COPY packages /app/packages`, `COPY mcp-server /app/mcp-server` and `COPY eval/pyproject.toml /app/eval/pyproject.toml`;
-    - `--no-editable` on `uv sync`.
-  - **PilotApp (16):** a clean swap.
-- **Step 3, `Procfile.dev.jinja` (BE-C29's root half):** the backend line is `cd backend && env -u VIRTUAL_ENV PORT=<backend_port> scripts/dev-watch.sh`. The header now says the backend restarts on a code change, and "Werkzeug auto-reload" is gone.
-- **Step 3, checked in the root test-app with `scripts/dev.py`:**
-  - readyz answered 200 with `"stage": "local-dev"`.
-  - An edit to `backend/app/utils/__init__.py` drained the server (a lifecycle shutdown in `logs/backend.log`) and started a new one under a new PID.
-  - **`scripts/dev.py stop`:** honcho sent SIGTERM to the three services, watchmedo passed it on, and the server logged a graceful shutdown. No honcho, watchmedo, server, vite or gateway process was left.
-  - **The test-app setup is by hand,** because `regen.sh` leaves no venvs, `.env` or node_modules: `uv sync` (root, backend), the `.env` printf from its `project.yaml`, a dev database, `cli upgrade-db` and `pnpm install`.
-- **RT03:** nothing else to take. Per worklist §2, the template's `dev.py`, `dev-sse-gateway.sh` and `regenerate-openapi.py` match or beat DA's, and DA's other scripts are marked leave.
-- **`STAGE` and `HOMELAB_INTERNAL`: not seeded.** This follows phase 3 and deviates from the step's text.
-  - With `STAGE` unset, the dev stack runs `local-dev`: `FLASK_ENV` is unset there, so it is `development` by default, and `local-dev` is D9b's ruled default for that (readyz confirms it).
-  - `HOMELAB_INTERNAL` changes nothing where `STAGE` isn't `prd`.
-  - A seeded `STAGE=local-dev` would pin the stage even when a developer sets `FLASK_ENV=production` to try the `prd` path.
-  - The seed is written only for apps with a database or S3.
-  - The backend's `.env.example` already documents both settings.
-- **Found outside this chunk, for the operator:**
-  - **New-app setup breaks for a hyphenated `project_name`.**
-    - The two templates' `database_name` defaults differ: the root `copier.yml` gives `project_name | replace('-', '_')` (`test_app`), the backend gives `project_name` (`test-app`).
-    - `project.yaml`'s seeded `backend/.env` names the root's. But `scripts/init-dev-database.py` reads `DATABASE_URL` from the process environment only, not from `.env`, so it creates `test-app`.
-    - `cli upgrade-db`, which does read `.env`, then fails with `database "test_app" does not exist`.
-    - Seen in the root test-app. A fix is one default, or the script loading `.env`, or both. The existing apps' `project.yaml` is app-owned, so this hits new apps.
-  - **Harness only:** the root test-app's backend answers carry `sse_gateway_port: 3002`, but its gateway runs on 3001. So its dev-stack readyz reports `sse_gateway` as an error, which is non-critical (`degraded`).
-- **For phase 10:** the changelog takes:
-  - the backend `Dockerfile` default on the two base images (by hand for existing apps, as above);
-  - the frontend `Dockerfile` on `modern-app-frontend-build`, with the build-cache restore and the `BUILD_CACHE_URL` build arg;
-  - `Procfile.dev` on `dev-watch.sh`;
-  - the DockerImages dependency (correction 13).
-- **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green after both steps. No Playwright run was needed: neither step changes what the suite runner or Playwright starts. The second build's `.copier-answers.yml` churn in `backend/` and `frontend/` was discarded.
+  - **DHCPApp (13), ZigbeeControl (14) and PilotApp (16):** clean swaps.
+  - **FieldnotesApp (15):** keep the runtime `apt-get install -y --no-install-recommends git ca-certificates` with its comment; `COPY packages /app/packages`, `COPY mcp-server /app/mcp-server` and `COPY eval/pyproject.toml /app/eval/pyproject.toml`; and `--no-editable` on `uv sync`.
+- **`tests/test_openapi_cache.py`** arrives with the backend update and fails until the app's cache is refreshed. Phase 7 already has every app refresh and commit `frontend/openapi-cache/openapi.json` after the backend update, so do that before the gates. The test builds the document under the test settings (`.env`, then `.env.test`), and `regenerate-openapi.py` builds it from the dev server under `.env`; for the template the two are the same. If the test still fails right after a refresh, the app's document depends on its settings, for example a blueprint registered under a flag in `register_blueprints`. Find that before changing the test.
+- **The preview pass:** no app has its own spec that gates on `PLAYWRIGHT_PREVIEW_MODE` today. The template's SSE specs arrive tagged.
+- **`scripts/check_updates.py`** arrives with the root update; nothing by hand.
+- **The architecture files:** nothing required. Optional, and the operator's call, since `.kubecoder/*` is app-owned: the template's `arch-validate` lint step, which today only ElectronicsInventory and PilotApp have. The `aac-tools` toolchain is in EI, DHCPApp, FieldnotesApp and PilotApp, and missing from IoTSupport and ZigbeeControl.
+- **The no-shell apps (ZigbeeControl, FieldnotesApp, PilotApp):** their flag combination is now built and checked by the harness; nothing by hand.
 
-### 2026-10-17, phase 8, steps 4–6: architecture, dependency checker, root diff
+**For phase 9:**
 
-Parent `0d3f7a7` (step 4), `953bbf5` (step 5), `67601c2` (step 6) and `3f43ff2` (MAT-12's docs); backend `332a431` (the `database_name` fix) and `40cd8da` (MAT-12 part 2); this entry. The frontend is unchanged; its regen churn was discarded.
+- **RT13:** the convention is that a spec needing a production build skips without `PLAYWRIGHT_PREVIEW_MODE=true` and carries `@preview`. `frontend/CLAUDE.md`'s Playwright section says so.
+- **Still open, for the operator or phase 9 (worklist §4.3):** after step 1, JenkinsPipelineUtils' `docs/pages/types/modern-app.md`, which says files follow "the reference file below, not the template", and the jenkins-pipelines skill's "two files predate the guide" paragraph (KubeCoderConfig) are stale.
 
-- **Step 4, the architecture producer (D8, RT06; correction 1 and operator answer 3 applied):**
-  - **`Jenkinsfile.architecture.jinja`** (new) is the pipeline guide's app-architecture reference file, with `repo_name` and `github_owner` filled in. Its header goes through `wordwrap(97)` like the `Jenkinsfile`'s.
-  - **Checked:** the root test-app's render is the guide's reference file and PilotApp's file with the names swapped. Rendered for FieldnotesApp, it matches that app's file byte for byte. The controller's declarative linter accepts it. No Jenkins run was possible.
-  - **`_skip_if_exists`** in the root `copier.yml`. All six apps have the file, so `copier update` leaves it alone.
-  - **No `scripts/arch-validate.py` and no model.** The validator ships in `aac-tools`, and the template ships no `docs/architecture/` (worklist §6.5).
-  - **The generated `CLAUDE.md`:**
-    - The repo-structure line names `Jenkinsfile.architecture`.
-    - A new "Architecture model" section says the model is kept current centrally (`tooling/fleet.py update` in `pvginkel/Architecture`), and that nothing runs from the app after a change.
-    - While `docs/architecture/` holds no model, the agent nudges the operator to seed it, in order: `/seed-architecture`, in a clone that `python3 tooling/fleet.py stage <Repo>` stages; push the model; then the operator creates `AaC/<Repo>` from the guide's `config.xml` and adds the `pipeline-producers.yaml` entry.
-  - **`.kubecoder/config.yaml.jinja`** gains the `aac-tools` toolchain. The root `lint` in **`project.yaml.jinja`** runs `cexec aac-tools arch-validate docs/architecture/*.yaml`, behind an `if ls docs/architecture/*.yaml` guard that prints a pointer to `CLAUDE.md` while there is no model. That keeps a new app's `kc project lint` green before seeding.
-    - The guard was checked by hand both ways.
-    - `arch-validate` itself didn't run: this environment has no `aac-tools`.
-  - **Ownership:** `CLAUDE.md` and `.kubecoder/*` are app-owned, so all of this reaches new apps only.
-- **Step 5, the dependency checker (RT07):** template-owned `scripts/check_updates.py`, stdlib only. It is run as `cexec modern-app python3 scripts/check_updates.py [--json]`, with no `pyproject.toml` entry (worklist RT04 row). It keeps DA's file name, unlike the template's hyphenated scripts.
-  - **Discovery:**
-    - A directory with a `uv.lock` (and a `pyproject.toml`) is a Python component. A workspace's members come through its root's lock, labelled `backend (python, <member>)`.
-    - A directory with a `package.json` is an npm component.
-    - Hidden directories, `node_modules`, `test-app`, `dist`, `build`, `logs` and `test-results` are pruned.
-  - **Deviation from the worklist's RT07 note:** Python uses `uv tree --outdated --depth 1 --frozen` (text, parsed), not `uv pip list --outdated`. It lists direct dependencies only, with their dependency groups, at their locked versions, and needs no venv.
-  - **npm** stays on DA's `pnpm outdated --format json`. It needs `node_modules`; without them the component is a warning.
-  - **Output:** a component that fails is a warning on stderr, and the exit is 0. DA's major/minor/patch tables and `--json` are kept.
-  - **Checked** in the root test-app, and read-only against FieldnotesApp (four workspace members and a frontend; 47 updates).
-- **Step 6, the rest of the root diff:** nothing more to take. Worklist §2's takes have all landed:
-  - RT01's wait helpers are phase 2's `backend/scripts/wait-for-services.py`;
-  - the test-mode env is step 1's preview pass;
-  - RT02 is step 1;
-  - RT04's RT07 is step 5, and its `CLAUDE.md` section is step 4.
+**For phase 10, the changelog takes:**
 
-  The commit fixes two comments in `.kubecoder/config.yaml.jinja` that step 1 made stale: the RustFS service runs in the `Jenkinsfile`'s "Test" stage (there is no "Run validation" stage), and the images are built with `helmCharts.kaniko2`. DA's `test_process.py` stays out (worklist: leave, unless the operator wants a root test gate).
-- **MAT-12, part 2:** template-owned backend `tests/test_openapi_cache.py`. **MAT-12 is closed** (Done, Resolved), citing frontend `98375e0`, backend `40cd8da` and parent `3f43ff2`.
-  - **How it works:**
-    - It builds the app in a subprocess (`create_app(skip_background_services=True)` and the Flask test client), because Spectree documents only a process's first app.
-    - It writes the document to a file, compares it with `../frontend/openapi-cache/openapi.json` as parsed JSON, and on a mismatch fails naming the added, removed and changed paths and `scripts/regenerate-openapi.py --frontend`.
-    - It skips where no frontend sits beside the backend, as in `backend/test-app`; the domain suite now reports 9 passed and 1 skipped.
-  - **Where it runs:** in the suite runner's backend suite, so in CI.
-  - **Checked** in the root test-app: it passes on the committed cache, and fails on a doctored one naming all three kinds of change.
-  - The generated `CLAUDE.md` mentions the test, and `copier_approach.md` lists it.
-- **The hyphenated-`project_name` setup bug: fixed at both causes** (backend `332a431`).
-  - **The default:** the backend's `database_name` now defaults to `project_name | replace('-', '_')`, the root's default.
-  - **The script:** `scripts/init-dev-database.py` (template-owned) loads `backend/.env` with `load_dotenv` before it reads `DATABASE_URL`, as `wait-for-services.py` does. The environment still wins.
-  - **Checked in the root test-app:**
-    - `kc project setup backend`, which works there, created `test_app` and `cli upgrade-db` migrated it.
-    - A `.env` naming another database made the script create that one.
-    - A `DATABASE_URL` in the environment won over `.env`.
-    - The harness's stale dev databases `test-app` and `test_app` were dropped first.
-  - **No app needs a by-hand edit.** Every app's backend answers record `database_name`, so the new default changes no render. The three database apps' two answers already agree (ElectronicsInventory `electronics_inventory`, IoTSupport `iotsupport`, PilotApp `pilot`). DHCPApp, ZigbeeControl and FieldnotesApp have no database. The script change arrives with the update.
-- **What apps meet in phases 11–16:**
-  - **`tests/test_openapi_cache.py`** arrives with the backend update and fails until the app's cache is refreshed. Phase 7 already has every app refresh and commit `frontend/openapi-cache/openapi.json` after the backend update, so do that before the gates.
-    - The test builds the document under the test settings (`.env`, then `.env.test`), and `regenerate-openapi.py` builds it from the dev server under `.env`. For the template the two are the same.
-    - If the test still fails right after a refresh, the app's document depends on its settings, for example a blueprint registered under a flag in `register_blueprints`. Find that before changing the test.
-  - **`scripts/check_updates.py`** arrives with the root update; nothing by hand.
-  - **The architecture files:** nothing required.
-    - Optional, the operator's call, since `.kubecoder/*` is app-owned: the template's `arch-validate` lint step. Today only ElectronicsInventory and PilotApp have one.
-    - The `aac-tools` toolchain is in EI, DHCPApp, FieldnotesApp and PilotApp, and missing from IoTSupport and ZigbeeControl.
-- **Operator actions:** none for the six apps. Per new app: seed the model, push, create `AaC/<Repo>`, add the `pipeline-producers.yaml` entry (as the generated `CLAUDE.md` says).
-- **For phase 10:** the changelog takes:
-  - `Jenkinsfile.architecture` (new apps only, app-owned), the `CLAUDE.md` architecture section, and `aac-tools` with the lint step;
-  - `scripts/check_updates.py`;
-  - the stale-cache test (MAT-12; apps refresh their cache with the update);
-  - the backend `database_name` default and `init-dev-database.py` reading `.env`.
-- **For the chunk that closes phase 8 (the no-shell variant, ruling 6):** nothing here touches the frontend template. The root test-app's backend now has a working setup (`.env`, venv, `test_app` migrated) until the next root regen wipes it.
-- **Gates:**
-  - `kc project build`, `test` (mother 773; domain 9 passed, 1 skipped; root backend suite all passed) and `lint` were green after the template edits.
-  - Step 6's comment fix and the docs came after; `kc project build root` and `kc project lint root` were green after them.
-  - No Playwright run: nothing here changes what the suite runner or Playwright starts. The new test runs inside the backend suite.
+- the new `Jenkinsfile`, with the per-app resolutions above; `scripts/build-cache-*.sh`, `--build-cache` and `BUILD_CACHE`; the preview pass and the `@preview` tag; `STAGE=tst` in CI;
+- the backend `Dockerfile` default on the two base images (by hand for existing apps, as above); the frontend `Dockerfile` on `modern-app-frontend-build`, with the build-cache restore and the `BUILD_CACHE_URL` build arg; the DockerImages dependency (correction 13);
+- `Procfile.dev` on `dev-watch.sh`;
+- `Jenkinsfile.architecture` (new apps only, app-owned), the `CLAUDE.md` architecture section, and `aac-tools` with the lint step;
+- `scripts/check_updates.py`;
+- the stale-cache test (MAT-12; apps refresh their cache with the update);
+- the backend `database_name` default and `init-dev-database.py` reading `.env`.
+
+The no-shell test-app is harness-only and reaches no app.
+
+**For phase 17 (correction 13):** push DockerImages `7e7c1f7` first, let its job rebuild `modern-app-backend-build`, and check that `registry:5000/modern-app-backend-build:latest` has `/bin/uv`. Only then push any app whose backend `Dockerfile` moved. The frontend move needs no image change. None of the three images has been rebuilt since 2026-06-17, so the operator should also confirm that a DockerImages build of them runs.
+
+**For the operator:**
+
+- **No action for the six apps.** Per new app: seed the architecture model, push it, create `AaC/<Repo>`, and add the `pipeline-producers.yaml` entry, as the generated `CLAUDE.md` says.
+- **Optional, before phase 17:** an image build here needs `imageBuilder: true` in `.kubecoder/config.yaml` and `kc env restart`.
+- **Harness only:** the root test-app's backend answers carry `sse_gateway_port: 3002`, but its gateway runs on 3001. So its dev-stack readyz reports `sse_gateway` as an error, which is non-critical (`degraded`).
+
+**Gates:**
+
+- **Steps 1–6 and MAT-12:** `kc project build`, `test` (mother 773; domain 9, then 9 passed and 1 skipped after MAT-12; root backend suite all passed) and `lint` were green after each step's template edits. After step 6's comment fix and its docs, `kc project build root` and `kc project lint root` were green. The regen churn of a template repo a step didn't change was discarded.
+- **Ruling 6:** `kc project build`, `test` (mother 773; domain 9 passed, 1 skipped; root backend suite all passed) and `lint` are green, with `pnpm run build` and `pnpm run check` passing in both frontend test-apps.
+- **Playwright, step 1, through the runner:**
+  - at one worker, 38 passed and 5 skipped on the dev server, then the preview pass passed 5 (runner peaks 3,254 and 1,297 MB; cgroup peak 3,536 MB);
+  - `worker-isolation.spec.ts` alone at two workers passed first time (5,080 MB runner peak), and the preview pass was skipped;
+  - one spec file (`sse-connectivity.spec.ts`) ran both passes;
+  - a CI-shaped run (`STAGE=tst BUILD_CACHE=true`, `--output-mode full --junitxml-dir … --retries 2`, one worker, a fresh pnpm store and no `node_modules`) was green, with `SUITE_RESULT` backend 9/0/0, frontend 38/0/5 and frontend-preview 5/0/0 (3,650 MB cgroup peak). So `STAGE=tst` changes no outcome of the domain or Playwright suites.
+- **Playwright at the close,** with all of phase 8 in: `run-suite --suite frontend` at one worker passed the dev-server pass and the preview pass (runner peaks 3,309 and 1,307 MB).
 
 ## Phases
 
