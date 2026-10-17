@@ -89,6 +89,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
   - §3 lists every Poetry use.
 - **Open for the operator:** D2 lockouts in IoTSupport, DHCPApp and ZigbeeControl; `HOMELAB_INTERNAL` on the public hosts; D8's means; PilotApp slice 002; MAT-12. None blocks phases 1–10.
 - **Read-only clones in `/work/scratch/`,** untouched: `JenkinsPipelineUtils`, `DockerImages`, `HomelabAppsDeploy`, `DevGuides`, `KubeCoderConfig`, `Architecture`, and the six deploy repos under `deploy/`. Phases 8, 9 and 11–16 can commit in them. Pull each one first.
+- **kubectl:** this environment has no `iac` tool container, so no `kubectl`. Phase 17 watches Argo CD syncs, so add `iac` to `.kubecoder/config.yaml` before it and use `cexec iac kubectl --context prd …`.
 
 ## Phases
 
