@@ -66,7 +66,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 9 | Conventions guide and skill | done 2026-10-17 | parent `91f1de1`, `5374474`, this entry; DevGuides clone `92bc97d`; KubeCoderConfig clone `c5db31a`, `ec17ea5`; JenkinsPipelineUtils clone `01bf1fe` (none pushed) |
 | 10 | Release | done 2026-10-17 | backend `6976a35`; frontend `5a155fd`, `9828760`, `2ee64bf`; parent `590ca61`, `51d8daa`, `63e1773`, `8b43fc1`, this entry; tags backend `v0.14.0` (`6976a35`), frontend `v0.21.0` (`2ee64bf`), root `v0.2.0` (this entry's commit); none pushed |
 | 11 | App: IoTSupport | done 2026-10-17 | IoTSupport `c294800` (root), `c9a67d1` (backend), `21d9d26` (frontend), `c8d48fa` (uv), `a8644f4`, `7481d05`, `db2a3cb`, `49cc3a2`, `6a414da`, `600b8f6`, `b8d3bef`, `b5011b7`, `3efd106`, `e227d07`, `394dde4`, `71d78ea`, `a55c75e`, `e4406be`, `c154080`, `112913f`, `cc5d981`, `7948bf3`, `c6d1337`, `b7741a4`; IotDeploy clone `6f6ea99` (not pushed); parent `3341c75`, `1a7d192`, `3fd9997`, `1ea48c7`, `d237d6c`, `1a1401f`, this entry; none pushed |
-| 12 | App: ElectronicsInventory | todo | |
+| 12 | App: ElectronicsInventory | in progress: changelog steps 1–5 done | ElectronicsInventory `f28c42a9` (root), `ab85dee9` (backend), `58ad6a13` (frontend), `966ab2a2` (uv); parent: this entry; none pushed |
 | 13 | App: DHCPApp | todo | |
 | 14 | App: ZigbeeControl | todo | |
 | 15 | App: FieldnotesApp | todo | |
@@ -765,6 +765,41 @@ Changelog steps 1–19 in `/work/IoTSupport`, one commit per step or fix (the st
 - Playwright runs at one worker here are cheap for IoT's suite (about 2 GB), and 2 workers fit too (3.6 GB). Check the app's `.kubecoder/config.yaml` for `secrets:` and services this environment lacks before reading failures as regressions.
 - EI and PilotApp, step 10: run the suite once and sort the failures into the groups above; hand a sub-agent a survey for `app.<attr> =`, singleton attribute writes, hand-built metric-registering services, `db.session` and literal IDs; finish with a reversed-order run and the row-count probe, which catch the state leaks a forward run hides. EI's `sse_server` is the same "second app" shape as IoT's `testing_app`.
 - **A possible template take (not a stop):** a public helper in `conftest_infrastructure.py` (say `clone_app(settings, app_settings)` as a context manager) would give IoT's `testing_app` and EI's `sse_server` one supported shape instead of private imports.
+
+### 2026-10-17, phase 12, steps 1–5: ElectronicsInventory sync and uv
+
+Changelog steps 1–5 in `/work/ElectronicsInventory`: `f28c42a9` root v0.2.0, `ab85dee9` backend v0.14.0, `58ad6a13` frontend v0.21.0, `966ab2a2` uv. Nothing is pushed. No template change was needed, and no conflict needed a ruling beyond those IoT used.
+
+**Root (`f28c42a9`).** Only `Jenkinsfile` conflicted, in two hunks. The header keeps EI's three-image wording. The Test stage takes the `postgres` service (first in `services:`), `STAGE: 'tst'` and `BUILD_CACHE: 'true'` with their comments, and the uv `install`/`run` pair; the template's five-line services/PostgreSQL comment above `modernApp.test` was not taken (as IoT; the checklist gives it to PilotApp only). The docs-image stage, the S3 block and the pins stage are EI's. The rest arrived clean (`Procfile.dev`, `scripts/dev.py`, the suite runner, the build-cache scripts, `check_updates.py`). Violation finder: no post-adoption drift; pre-existing `.gitignore` +2.
+
+**Backend (`ab85dee9`).** Conflicts in `Dockerfile`, `app/app_config.py`, `app/services/container.py`, `pyproject.toml` and `tests/conftest.py`; a clean hunk in `vulture_whitelist.py`; new app-owned `tests/test_smoke.py` kept; `.env.example.rej` deleted. Deleted by the update: `scripts/dev-server.sh`, `scripts/initialize-sqlite-database.sh`.
+
+- `Dockerfile`: the template's side is **step 14 whole**: it equals the backend test-app's render but for `EXPOSE 3001`. Step 14's precondition stands (DockerImages `7e7c1f7` pushed, `modern-app-backend-build` rebuilt before CI builds EI).
+- `container.py`: **step 7 done**: EI's file with `lifecycle_coordinator` and `health_service` moved above `s3_service`, and `health_service=health_service` on `S3Service` and `SSEConnectionManager`. The merge's second `testing_service = providers.Factory(TestingService)` was dropped (EI has its own, also `Factory`), as were the template's reworded comments. One conflict hunk's "after" side would have deleted EI's kit, inventory and document providers: resolve this file by hand, never by taking a side.
+- `app_config.py`: kept as EI's. The hunk brought `dump_for_logging()` without `Sensitive` marks on `openai_api_key` and `mouser_search_api_key`; **step 8 is still open** (optional; without the method nothing is dumped).
+- `pyproject.toml`: kept, then converted in step 5. `tests/conftest.py`: kept as EI's (docstring hunk dropped); step 10 untouched. `vulture_whitelist.py`: the `uv run` comment taken.
+- Violation finder: no post-adoption drift; pre-existing `app/schemas/upload_document.py` +3/-1.
+
+**Frontend (`58ad6a13`).** Conflicts in `eslint.config.js`, `package.json` and `src/routes/index.tsx`; `src/styles/button.ts` took a clean hunk; `.env.example.rej` deleted.
+
+- **`eslint.config.js` is template-owned, and EI carries a standing edit in it** that neither its `CLAUDE.md` nor worklist §5 lists: the `role-gating` plugin (imports of `scripts/eslint-rules/role-import-enforcement.js` and `gate-usage-enforcement.js`, and two config blocks). The template's new TanStack-routes block (`react-refresh/only-export-components` off under `src/routes/`) landed at the same spot. Kept both: the template's block, then EI's two. The finder reports it as pre-existing divergence (+27), so the next update conflicts again unless EI lists it or the template gains a hook for app rules.
+- `package.json`: the hunks are **step 12's `package.json` part** (`pg`, `@types/pg`, `generate:api:with-backend`, the optional `build-fast`/`build` split); kept EI's `split2` and `ssegateway`. `pnpm install` synced the lock (adds only `pg`, `@types/pg`). **Step 12's `pnpm update eslint-plugin-react-hooks ssegateway` is not done.**
+- `src/routes/index.tsx`: kept EI's redirect to `/parts`. `button.ts`: **step 13 done** (`whitespace-nowrap` in both).
+- `vite.config.ts` (template-owned) equals the test-app's render but for its ports; EI had no `xfwd`.
+- Violation finder: no post-adoption drift; pre-existing divergence in `.gitignore`, `eslint.config.js` (above), `knip.config.ts`, `scripts/generate-api.js` (an example comment), `alert.tsx`, `list-section-header.tsx`, `status-badge.tsx`, `api-error.ts`, all present before the sync.
+
+**Packaging (step 5, `966ab2a2`).** Root and backend `pyproject.toml` are PEP 621 with hatchling, one for one per worklist §3: names `electronics-inventory` and `electronics-inventory-backend` kept, the backend's placeholder author (`Your Name <your.email@example.com>`) converted as is, `requires-python` `>=3.13,<4` (root) and `>=3.11,<4` (backend) as Poetry had them, the PilotApp comment above the backend's `[build-system]`. Phase 11's lock method (`/work/scratch/iot-uv/lockpins.py`; EI's pin lists in `/work/scratch/ei-uv/`): the root lock equals `poetry.lock` exactly, and the backend's adds only `tomli` 2.5.0. Both `poetry.lock` files are deleted. On uv as well: `.kubecoder/project.yaml` (commands and comments), the `.kubecoder/config.yaml` comments, root app-owned `scripts/regenerate-openapi.py` (`uv run dev`), `CLAUDE.md`, `backend/CLAUDE.md`, `backend/README.md`, `frontend/CLAUDE.md`, `docs/commands.md`, `docs/slice-test-plan.md`, `docs/slice-doc-plan.md`, the code-workspace comment, and `frontend/docs/contribute/testing/ci_and_execution.md` (Jenkins runs `uv run --no-sync run-suite`). Left: `backend/docs/ei_copier_refactoring.md:346` (`[tool.poetry.scripts]` in a historical refactoring plan) and the frozen `docs/features/`. `backend/.dockerignore` names no lock file.
+
+**Gates.** `kc project setup` is green on uv (root and backend `uv sync --locked`, `init-dev-database.py`, `upgrade-db` at revision 023, the frontend's install and generators). Root ruff and backend vulture are green. Red, both fixed by **step 6**:
+
+- backend `uv run ruff check .`: two I001 in template-owned `app/database.py` and `tests/test_database_schema.py` (ruff 0.11; IoT's cleared under 0.15);
+- backend `uv run mypy .`: `app/config.py:81` (`Stage` literal; needs `uv lock --upgrade-package mypy` to 1.20).
+
+**For the next chunks.**
+
+- Done whole: steps 7, 13, 14. Partly: step 12 (`pnpm update eslint-plugin-react-hooks ssegateway` left). Open: 6, 8, 9, 10, 11, 15–19.
+- Step 16 upkeep: `frontend/docs/contribute/testing/playwright_developer_guide.md:72` and `docs/architecture.md:56` still describe the Playwright SQLite seed through the deleted `initialize-sqlite-database.sh`. `.kubecoder/config.yaml` still says both suites run on SQLite (lines 13–14, 85, 109) and readyz reports `database.connected` (line 108; step 9).
+- Expect `tsc` to fail until step 15's OpenAPI refresh (`use-ui-setup.ts`), as in IoT.
 
 ## Phases
 
