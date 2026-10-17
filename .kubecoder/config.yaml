@@ -37,6 +37,12 @@ capabilities:
 # would put the two halves of one command in two containers.
 tools:
   - use: modern-app
+  # kubectl (with Helm and Terraform) for reading the prd cluster: the Argo CD
+  # syncs that follow a push of the apps and their deploy repos.
+  - use: iac
+
+# kaniko, to prove the apps' and the base images' Dockerfiles before a push.
+imageBuilder: true
 
 # Both reached on localhost from the modern-app sidecar, where the suites run.
 #   s3storage — RustFS on localhost:9000, credentials s3storage/s3storage. The
