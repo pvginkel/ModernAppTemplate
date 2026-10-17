@@ -39,9 +39,10 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
     ├── copier.yml                  # Frontend template configuration
     ├── template/                   # Copier template source
     ├── test-app/                   # Generated test application (DO NOT edit)
-    ├── test-app-domain/            # Hand-written domain files for test-app
+    ├── test-app-no-shell/          # Same, rendered with use_app_shell=false (gitignored)
+    ├── test-app-domain/            # Hand-written domain files for both test-apps
     ├── tests/                      # Mother project tests (infrastructure)
-    ├── regen.sh                    # Frontend regeneration script
+    ├── regen.sh                    # Frontend regeneration script (both test-apps)
     └── package.json                # Dev dependencies
 ```
 
@@ -59,7 +60,7 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
 `validate.sh` does not exist — it was planned but never added to this repo. Validation is done per template instead:
 
 - **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `uv run pytest ../tests/ -v && uv run pytest tests/ -v` (plus ruff/mypy/vulture).
-- **Frontend**: `cexec modern-app bash regen.sh`, then in `test-app`: `pnpm run check && pnpm run build`.
+- **Frontend**: `cexec modern-app bash regen.sh`, then in `test-app` and in `test-app-no-shell`: `pnpm run check && pnpm run build`. The two test-apps differ only in `use_app_shell` (`true`, and `false` as ZigbeeControl, FieldnotesApp and PilotApp run). `test-app-no-shell` is gitignored and never runs Playwright; `regen.sh` makes it a git repo of its own, because knip reads the `.gitignore` files up to the git root and would otherwise see no files.
 - **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app`: `uv run ruff check scripts tools && uv run run-suite --suite backend`.
 
 If all three pass, the change is safe to port to downstream apps.

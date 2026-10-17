@@ -81,9 +81,10 @@ cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/ -v && uv run pyte
 ### Working on the frontend template
 ```bash
 cd /work/ModernAppTemplate/frontend
-# Edit files in template/, then:
+# Edit files in template/, then (regen.sh renders test-app and test-app-no-shell):
 cexec modern-app bash regen.sh
 cexec modern-app sh -c 'cd test-app && pnpm run check && pnpm run build'
+cexec modern-app sh -c 'cd test-app-no-shell && pnpm run check && pnpm run build'
 ```
 
 ### Working on the root template
@@ -96,12 +97,16 @@ cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools && u
 
 ### Validating both templates
 
-`kc project build` regenerates all three test-apps (backend, frontend, root, in
+`kc project build` regenerates all the test-apps (backend, frontend, root, in
 that order); `kc project test` and `kc project lint` then run the gates above
-against them. `validate.sh`, described in `docs/copier_approach.md`, was never
-added to this repo. The regens churn the tracked `test-app/` lockfiles and
-`.copier-answers.yml` in `backend/` and `frontend/`; commit that with the
-template change or discard it.
+against them. The frontend has two: `test-app` (`use_app_shell=true`) and
+`test-app-no-shell` (`use_app_shell=false`, as ZigbeeControl, FieldnotesApp and
+PilotApp run), and `build` and `lint` check both. Only `test-app` goes into the
+root test-app, so Playwright runs the shell variant alone. `validate.sh`,
+described in `docs/copier_approach.md`, was never added to this repo. The
+regens churn the tracked `test-app/` lockfiles and `.copier-answers.yml` in
+`backend/` and `frontend/`; commit that with the template change or discard it.
+`frontend/test-app-no-shell` is gitignored, so it churns nothing.
 
 ### Syncing a downstream app
 

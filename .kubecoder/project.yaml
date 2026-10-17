@@ -15,6 +15,11 @@
 # normal template workflow for `build`, but pod start should not dirty the
 # trees, so `setup` regenerates only a test-app that was never generated here,
 # keyed on a gitignored file regen.sh writes.
+#
+# The frontend has a second test-app, frontend/test-app-no-shell: the same
+# answers with use_app_shell=false, as ZigbeeControl, FieldnotesApp and PilotApp
+# run. It is gitignored, and only built and checked: root/regen.sh copies
+# test-app alone, so Playwright never runs the no-shell variant.
 projects:
   backend:
     description: >-
@@ -46,13 +51,18 @@ projects:
       ModernAppFrontendTemplate — the Copier template for React/Vite frontends.
       Work in template/, then `kc project build` to regenerate test-app.
     # No Python project of its own: regen.sh runs the backend repo's copier.
+    # regen.sh renders both test-apps, or only the ones it is given.
     setup:
-      - test -f test-app/src/routeTree.gen.ts || cexec modern-app bash regen.sh
+      - test -f test-app/src/routeTree.gen.ts || cexec modern-app bash regen.sh test-app
+      - test -f test-app-no-shell/src/routeTree.gen.ts || cexec modern-app bash regen.sh test-app-no-shell
     build:
       - cexec modern-app bash regen.sh
       - cexec modern-app sh -c 'cd test-app && pnpm run build'
-    # eslint, tsc and knip.
-    lint: cexec modern-app sh -c 'cd test-app && pnpm run check'
+      - cexec modern-app sh -c 'cd test-app-no-shell && pnpm run build'
+    # eslint, tsc and knip, in both test-apps.
+    lint:
+      - cexec modern-app sh -c 'cd test-app && pnpm run check'
+      - cexec modern-app sh -c 'cd test-app-no-shell && pnpm run check'
 
   root:
     description: >-
