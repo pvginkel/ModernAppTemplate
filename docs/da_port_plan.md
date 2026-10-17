@@ -60,7 +60,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 3 | Backend: fixes, stages, internals fact | done 2026-10-17 | backend `5e7552c`, `c5e3c97`, `a6537f5`, `0f25bc3`, `fd86f68`, `fa492c6`, `76ece1f` (reverted by `625c644`), `d70dfe9`, `6c4de17`, `15621ef`, `a77da81`, `dccf055`, `1f2df1f`; parent: this entry |
 | 4 | Backend: auth | done 2026-10-17 | backend `7db254c`, `997ea1f`, `c3b8607`, `a84795a`; frontend `fbf00f9`; parent `e2064d4`, `670d8d8`, this entry |
 | 5 | Backend: readiness, SSE, small takes | done 2026-10-17 | backend `f129198`, `b224b4f`, `0fdb1d2`, `b71c1d0`, `22436d4`, `ce1d7d4`, `ac635cb`; parent `d4dc992`, `994c64e`, this entry |
-| 6 | Frontend: fixes, Playwright on PostgreSQL | todo | |
+| 6 | Frontend: fixes, Playwright on PostgreSQL | in progress: FE01–FE09 done | frontend `23dd7dc`, `c2d9fde`, `9a8e9b6`, `ebb01c1`; parent: the FE01–FE09 entry |
 | 7 | Frontend: stages, SSE, defaults | todo | |
 | 8 | Root: CI, images, dev stack, architecture, tooling | todo | |
 | 9 | Conventions guide and skill | todo | |
@@ -330,6 +330,31 @@ Backend `f129198` (step 1: D5, BE-C13, BE-T13, and BE-T14's S3 check tests), `b2
   - BE-C28: `TestExternalServiceException` and `TestApiErrorResponseSchema` in `tests/test_error_handling.py` (5).
   - D9a: `tests/utils/test_pagination.py` is new (16), with paging over duplicate sort values on PostgreSQL in both directions.
 - **Gates:** after the last commit, `kc project build`, `test` (mother 656 → 773 over the phase, domain 9, root backend suite) and `lint` are green. Playwright passed at one worker (3,279 MB peak), and `worker-isolation.spec.ts` (`tests/e2e/parallel/`) alone at two workers passed first time (5,402 MB peak). Step 1 and BE-T10/BE-T11 each passed the same gates when they landed: mother 690, then 744; Playwright peaks 3,338 and 5,283 MB, then 3,400 and 5,372 MB.
+
+### 2026-10-17, phase 6, FE01–FE09: frontend fixes, first half
+
+Frontend `23dd7dc` (FE02 with FE03), `c2d9fde` (FE04), `9a8e9b6` (FE06) and `ebb01c1` (FE01, FE05's error body, FE07, FE08, FE09, and phase 5's stale readiness comment); parent: this entry. FE10 had landed and was skipped.
+
+- **FE01:** only the enabled-child clone changed. The disabled wrapper's `data-testid={undefined}` already renders no attribute.
+- **FE02 (deviation from DA's form):** one `task_event` listener per SSE provider, keyed by its `addEventListener` and reference-counted across the mounted hooks, feeds the replay buffer from mount. DA registered one per hook instance, which buffers and replays each event once per instance. The per-task listener no longer buffers. Nothing in the template or `test-app-domain` mounts `useSSETask`, so the Playwright suite doesn't exercise FE02 or FE03; only typecheck and knip see them.
+- **FE03:** `percentage` is `value * 100`, and `SSEProgressEvent.data.value` is now required (`number`), as the backend schema has it. DA's `null` → `-1` mapping is left out.
+- **FE04:** DA's patch. Services spawn `detached` and are stopped by `signalProcessGroup()` (`servers.ts`), SIGTERM then SIGKILL to the group; the worker's exit hook SIGKILLs every group. `testing-server.sh` execs `node_modules/.bin/vite`. Checked: SIGINT to a run's process group during worker startup left no backend, gateway or Vite behind, and each service ran as its own group leader. A clean run left none either.
+- **FE05: not needed, confirmed.** The SSE and deployment specs (10 tests) pass without `auth.createSession()`: the Playwright backend runs with OIDC off, and `/api/auth/self` answers with the local admin. No sessions were added. The body-in-error change went into all three `AuthFactory` calls (DA changed `createSession` only).
+- **FE06:** DA frontend's `deployment-sse.ts` and `deployment-reset.ts`, and the portal's `test-events.ts` (15 s default waits, `{ cause }` on the one throw that wraps an error). In the banner spec: the bridge re-wait after the reload click, and the portal's 15 → 30 s event waits; FE05's `createSession` there is left out. DA's `disconnect` comment named its auth-recovery path; the template's doesn't. `deployment-reset.ts`'s comment speaks of preview mode, which FE17 brings.
+- **FE07:** the flag. `test-app-domain/src/lib/api/generated/types.ts` is regenerated from the existing `openapi-cache` (not refetched, so phase 5's missing hook endpoint is still missing): 13 properties gain `?`, response properties with defaults among them (`status?`, the task event's `data?`, `task_type?`).
+- **FE08:** the portal's `mountedRef` version, as is.
+- **FE09:** the global allow. `expectConsoleError`'s added `Toast exception` pattern (`tests/support/helpers.ts:140`) is now redundant; it is left in place.
+- **Phase 5's note:** the worker fixture's comments no longer say the backend's readyz waits for the gateway. The gateway still starts first.
+- **knip:** no template-owned file was added or removed, so `knip-template-ignore.json` is unchanged.
+- **For the later chunks:**
+  - FE17: the `--preview` branch of `testing-server.sh` must exec `node_modules/.bin/vite preview` too, or a pnpm wrapper outlives the group's leader again.
+  - FE18 and FE23 edit `servers.ts`: keep `detached: true` and stop through `signalProcessGroup()`. A backend that FE23 starts with `--database-url` is killed with its group, `uv` and Python both.
+- **What apps must change by hand (phases 11–16):**
+  - **ElectronicsInventory (12):** `src/components/parts/ai-part-progress-step.tsx:79,81` and `ai-part-cleanup-progress-step.tsx:79,81` multiply `progress.percentage` by 100 themselves. Drop that, or the bars read 100 times too high (FE03). FieldnotesApp's `use-inbox.ts` reads only the message; no other app uses `useSSETask`.
+  - **Every app:** the build regenerates `src/lib/api/generated/` (gitignored) with FE07's flag, so a property with a default that isn't required becomes optional, in request and response types alike. App code that reads such a response property as always present can fail `tsc`; fix it at the sync.
+  - **Every app:** an unexpected error toast no longer fails a spec (FE09), and a ui-state scope whose data is cached at mount now emits `ready` on mount (FE08). If an app spec changes outcome at the sync, look here first.
+- **For phase 10:** the changelog takes FE03's scale (apps that scaled the percentage themselves), FE07's regenerated types, FE09's console policy and FE04's process groups.
+- **Gates:** `kc project build`, `test` (mother 773, domain 9, root backend suite) and `lint` are green. Playwright at one worker passed (3,323 MB peak), and `worker-isolation.spec.ts` alone at two workers passed first time (5,009 MB peak).
 
 ## Phases
 
