@@ -36,8 +36,8 @@ This repository runs in a KubeCoder environment.
 
 - The three repos live at `/work/ModernAppTemplate`, with the two template repos checked out inside it at `backend/` and `frontend/` (separate git repos, not submodules), and the root template at the parent repo's own root. Git operations work in all three.
 - The downstream apps (see below) are checked out at `/work/<App>`, one monorepo per app with the root layer at the repo root and the backend and frontend at `backend/` and `frontend/`.
-- Language tooling lives in the `modern-app` tool container: prefix Poetry, `copier` and pnpm commands with `cexec modern-app`. The dev container itself has `node`, `npm`, `python3` and `git` only.
-- `cexec` passes arguments through verbatim, so compound commands need a wrapper: `cexec modern-app sh -c 'cd test-app && poetry install'`.
+- Language tooling lives in the `modern-app` tool container: prefix uv, `copier` and pnpm commands with `cexec modern-app`. The dev container itself has `node`, `npm`, `python3` and `git` only.
+- `cexec` passes arguments through verbatim, so compound commands need a wrapper: `cexec modern-app sh -c 'cd test-app && uv sync'`.
 - Curated entry points are in `.kubecoder/project.yaml`, run with `kc project setup|build|test|lint`.
 
 ## Downstream Apps
@@ -75,7 +75,7 @@ Read these before making changes:
 cd /work/ModernAppTemplate/backend
 # Edit files in template/, then:
 cexec modern-app bash regen.sh
-cexec modern-app sh -c 'cd test-app && poetry run pytest ../tests/ -v && poetry run pytest tests/ -v'
+cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/ -v && uv run pytest tests/ -v'
 ```
 
 ### Working on the frontend template
@@ -91,7 +91,7 @@ cexec modern-app sh -c 'cd test-app && pnpm run check && pnpm run build'
 cd /work/ModernAppTemplate
 # Edit files in root/template/, then (backend and frontend regens must run first):
 cexec modern-app bash root/regen.sh
-cexec modern-app sh -c 'cd root/test-app && poetry run ruff check scripts tools && poetry run run-suite --suite backend'
+cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools && uv run run-suite --suite backend'
 ```
 
 ### Validating both templates
@@ -113,11 +113,12 @@ python scripts/find_template_violations.py /work/<App>/frontend --template-repo 
 
 # Update app from template (each run needs a clean tree; commit between them).
 # Run copier from the component's own directory: it resolves the relative
-# _src_path in .copier-answers.yml against the current directory. copier comes
-# from the backend template's Poetry env (the parent repo has none).
-cd /work/<App>          && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
-cd /work/<App>/backend  && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
-cd /work/<App>/frontend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+# _src_path in .copier-answers.yml against the current directory. copier is the
+# one pinned in the backend template repo's uv project (the parent repo has
+# none); --project selects it without changing the working directory.
+cd /work/<App>          && cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+cd /work/<App>/backend  && cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+cd /work/<App>/frontend && cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
 ```
 
 ## S3 Storage
@@ -130,7 +131,7 @@ Backend test suites with `use_s3=true` check S3 connectivity at startup (in `con
 
 Both templates include dead code detection as part of the `check` pipeline:
 
-- **Backend**: `poetry run check` runs ruff, mypy, vulture, and pytest. Vulture whitelist is in `vulture_whitelist.py` (app-owned, skip_if_exists).
+- **Backend**: `uv run check` runs ruff, mypy, vulture, and pytest. Vulture whitelist is in `vulture_whitelist.py` (app-owned, skip_if_exists).
 - **Frontend**: `pnpm run check` runs eslint, tsc, and knip. Template exclusions are in `knip-template-ignore.json` (template-owned, updated on each `copier update`).
 
 **Maintaining `knip-template-ignore.json`**: When adding or removing template-owned source files in the frontend template, update `template/knip-template-ignore.json` accordingly. This file lists all template-owned paths that knip should skip during unused-export analysis. Without it, template exports that aren't consumed by a particular app would be flagged as dead code.

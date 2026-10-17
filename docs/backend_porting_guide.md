@@ -33,7 +33,7 @@ You can start with a subset of flags and enable more later (see Phase 3).
 
 ```bash
 cd /work/ModernAppTemplate/backend
-poetry run copier copy . /work/<YourProject>/backend-new --trust \
+uv run copier copy . /work/<YourProject>/backend-new --trust \
   -d project_name=your-project \
   -d project_description="Your project description" \
   -d author_name="Your Name" \
@@ -76,8 +76,8 @@ This creates a working skeleton. The template generates two categories of files:
 
 ```bash
 cd /work/<YourProject>/backend-new
-poetry install
-python -m pytest tests/ -v
+uv sync
+uv run pytest tests/ -v
 ```
 
 The scaffold should pass basic tests out of the box.
@@ -311,7 +311,7 @@ If you started with a subset of flags (e.g., `use_s3=false`), you can enable the
 
 ```bash
 cd /work/<YourProject>/backend-new
-poetry run copier update --trust --defaults -d use_s3=true -d use_sse=true
+uv run --project /work/ModernAppTemplate/backend copier update --trust --defaults -d use_s3=true -d use_sse=true
 ```
 
 This will:

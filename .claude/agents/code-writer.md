@@ -80,7 +80,7 @@ Do NOT proceed with implementation until you have read these documents.
    ```bash
    cd /work/ModernAppTemplate/backend
    rm -rf test-app
-   poetry run copier copy . test-app --trust \
+   uv run copier copy . test-app --trust \
      -d project_name=test-app \
      -d project_description="Test application" \
      -d author_name="Test Author" \
@@ -90,14 +90,14 @@ Do NOT proceed with implementation until you have read these documents.
      -d use_s3=true \
      -d use_sse=true \
      -d workspace_name=TestApp
-   cd test-app && echo "# Test App" > README.md && poetry install
+   cd test-app && echo "# Test App" > README.md && uv sync
    ```
 
 7. **Verify**:
    ```bash
    cd /work/ModernAppTemplate/backend/test-app
-   poetry run pytest ../tests/ -v          # Template tests
-   poetry run ruff check ../template/ .    # Linting
+   uv run pytest ../tests/ -v          # Template tests
+   uv run ruff check ../template/ .    # Linting
    ```
 
 ## Definition of Done
@@ -109,8 +109,8 @@ Your implementation is complete when:
 - [ ] Tests are in `tests/` directory and pass
 - [ ] `changelog.md` is updated with migration instructions
 - [ ] test-app has been regenerated
-- [ ] `poetry run pytest ../tests/ -v` passes (all tests green)
-- [ ] `poetry run ruff check .` passes (no linting errors)
+- [ ] `uv run pytest ../tests/ -v` passes (all tests green)
+- [ ] `uv run ruff check .` passes (no linting errors)
 - [ ] You've documented the verification commands you ran
 
 ## Communication

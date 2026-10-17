@@ -152,21 +152,8 @@ def _discover_components(app_dir):
 def _run_backend(app_name, label, path, results):
     """Install and test a backend component."""
     col = progress_start(f"Installing {app_name} {label} dependencies")
-    cmds = []
-    if HAS_PYTHON313:
-        cmds.append(["poetry", "env", "use", "python3.13"])
-    cmds.append(["poetry", "install", "--no-interaction"])
-
-    ok = True
-    detail = ""
-    for cmd in cmds:
-        ok, detail = run(cmd, cwd=path)
-        if not ok:
-            if "lock" in detail.lower() or "locked" in detail.lower():
-                run(["poetry", "lock", "--no-update", "--no-interaction"], cwd=path, timeout=300)
-                ok, detail = run(cmd, cwd=path)
-        if not ok:
-            break
+    # Not --locked: uv re-locks a stale uv.lock before it syncs.
+    ok, detail = run(["uv", "sync"] + (["--python", "python3.13"] if HAS_PYTHON313 else []), cwd=path)
     progress_end(ok, col)
 
     results.append((f"{label} install", ok, detail))
@@ -176,7 +163,7 @@ def _run_backend(app_name, label, path, results):
         results.append((f"{label} pytest", False, "Skipped (install failed)"))
     else:
         col = progress_start(f"Running {app_name} {label} tests")
-        ok, detail, peak_mb = run_tracked(["poetry", "run", "pytest", "-v", "--tb=short"], cwd=path, timeout=300)
+        ok, detail, peak_mb = run_tracked(["uv", "run", "pytest", "-v", "--tb=short"], cwd=path, timeout=300)
         progress_end(ok, col)
         results.append((f"{label} pytest", ok, detail, peak_mb))
 

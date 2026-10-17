@@ -21,7 +21,9 @@ projects:
       ModernAppBackendTemplate — the Copier template for Flask backends. Work
       in template/, then `kc project build` to regenerate test-app.
     setup:
-      - cexec modern-app poetry install --no-interaction
+      # This repo's own uv project: the pinned copier both templates' regens
+      # and every app's `copier update` run.
+      - cexec modern-app uv sync --locked
       - test -f test-app/.env.test || cexec modern-app bash regen.sh
       # .env.test is the harness's, not the template's; keep test-app's copy
       # current without a regen.
@@ -31,20 +33,20 @@ projects:
     # the module name tests.conftest, so they cannot run in one pytest process.
     # The mother suite needs the s3storage sidecar (config.yaml).
     test:
-      - cexec modern-app sh -c 'cd test-app && poetry run pytest ../tests/'
-      - cexec modern-app sh -c 'cd test-app && poetry run pytest tests/'
-    # test-app's own `poetry run check` minus its pytest step, which is `test:`.
+      - cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/'
+      - cexec modern-app sh -c 'cd test-app && uv run pytest tests/'
+    # test-app's own `uv run check` minus its pytest step, which is `test:`.
     lint:
-      - cexec modern-app sh -c 'cd test-app && poetry run ruff check .'
-      - cexec modern-app sh -c 'cd test-app && poetry run mypy .'
-      - cexec modern-app sh -c 'cd test-app && poetry run vulture app/ vulture_whitelist.py --min-confidence 80'
+      - cexec modern-app sh -c 'cd test-app && uv run ruff check .'
+      - cexec modern-app sh -c 'cd test-app && uv run mypy .'
+      - cexec modern-app sh -c 'cd test-app && uv run vulture app/ vulture_whitelist.py --min-confidence 80'
 
   frontend:
     description: >-
       ModernAppFrontendTemplate — the Copier template for React/Vite frontends.
       Work in template/, then `kc project build` to regenerate test-app.
+    # No Python project of its own: regen.sh runs the backend repo's copier.
     setup:
-      - cexec modern-app poetry install --no-interaction
       - test -f test-app/src/routeTree.gen.ts || cexec modern-app bash regen.sh
     build:
       - cexec modern-app bash regen.sh
@@ -64,6 +66,6 @@ projects:
     # Backend suite only. `--suite frontend` (the frontend template's
     # Playwright specs) passes, but runs the modern-app sidecar up to its
     # 5 GiB memory limit, and one run took the container down. Run it by hand:
-    #   cexec modern-app sh -c 'cd root/test-app && poetry run run-suite --suite frontend'
-    test: cexec modern-app sh -c 'cd root/test-app && poetry run run-suite --suite backend'
-    lint: cexec modern-app sh -c 'cd root/test-app && poetry run ruff check scripts tools'
+    #   cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite frontend'
+    test: cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite backend'
+    lint: cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools'

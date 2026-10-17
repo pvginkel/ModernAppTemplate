@@ -135,7 +135,7 @@ After ANY template change, regenerate test-app:
 ```bash
 cd /work/ModernAppTemplate/backend
 rm -rf test-app
-poetry run copier copy . test-app --trust \
+uv run copier copy . test-app --trust \
   -d project_name=test-app \
   -d project_description="Test application" \
   -d author_name="Test Author" \
@@ -145,7 +145,7 @@ poetry run copier copy . test-app --trust \
   -d use_s3=true \
   -d use_sse=true \
   -d workspace_name=TestApp
-cd test-app && echo "# Test App" > README.md && poetry install
+cd test-app && echo "# Test App" > README.md && uv sync
 ```
 
 #### 4.3 Verification Checkpoint
@@ -156,13 +156,13 @@ Run verification from the test-app directory:
 cd /work/ModernAppTemplate/backend/test-app
 
 # Run template test suite (primary validation)
-poetry run pytest ../tests/ -v
+uv run pytest ../tests/ -v
 
 # Run linting on generated code
-poetry run ruff check ../template/ .
+uv run ruff check ../template/ .
 
 # Run type checking (if configured)
-poetry run mypy . --ignore-missing-imports
+uv run mypy . --ignore-missing-imports
 ```
 
 **Checklist:**
@@ -289,9 +289,9 @@ Use `copier update` to propagate changes to all downstream apps. **Never manuall
 ```bash
 # From the component's directory (/work/<App>, /work/<App>/backend or
 # /work/<App>/frontend): copier resolves the relative _src_path against the
-# current directory. copier comes from the backend template's Poetry env.
+# current directory. copier comes from the backend template's uv project.
 cd /work/<App>/backend
-cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
 ```
 
 After the update:
@@ -352,8 +352,8 @@ git add . && git commit -m "Fix auth/self endpoint"
 git tag v0.X
 
 # 6. Update downstream apps
-cd /work/IoTSupport/backend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
-cd /work/ElectronicsInventory/backend && cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults
+cd /work/IoTSupport/backend && cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+cd /work/ElectronicsInventory/backend && cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
 # Run tests in each...
 ```
 
@@ -395,10 +395,10 @@ Before considering work complete:
    Edit template/common/storage/s3_service.py
 
 5. Regenerate test-app:
-   rm -rf test-app && poetry run copier copy . test-app --trust ...
+   rm -rf test-app && uv run copier copy . test-app --trust ...
 
 6. Run tests:
-   cd test-app && poetry run pytest ../tests/ -v
+   cd test-app && uv run pytest ../tests/ -v
 
 7. Update changelog:
    Add entry describing the fix and migration (usually just "copy updated file")

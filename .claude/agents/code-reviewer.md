@@ -130,8 +130,8 @@ This is NOT a regular application—it is a **Copier template**. Reviews must ve
 
 ## Verification Status
 
-- [ ] Tests pass (`poetry run pytest ../tests/ -v`)
-- [ ] Linting passes (`poetry run ruff check .`)
+- [ ] Tests pass (`uv run pytest ../tests/ -v`)
+- [ ] Linting passes (`uv run ruff check .`)
 - [ ] test-app regenerated
 
 ## Recommendations

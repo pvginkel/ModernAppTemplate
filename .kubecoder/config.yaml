@@ -31,7 +31,7 @@ capabilities:
   github: rw
 
 # One sidecar carrying both toolsets. Neither template is single-language: each
-# drives copier under Poetry, the backend template's test-app is a Poetry/pytest
+# drives copier under uv, the backend template's test-app is a uv/pytest
 # project, and the frontend template's test-app is pnpm/Vite with Playwright
 # specs that run against a backend. Splitting them into `python` + `frontend`
 # would put the two halves of one command in two containers.

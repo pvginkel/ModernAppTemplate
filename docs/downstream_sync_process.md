@@ -24,9 +24,9 @@ Run the violation finder script from the template repo, once per component. Down
 
 ```bash
 cd /work/ModernAppTemplate
-poetry run python scripts/find_template_violations.py /path/to/downstream/app --template-repo .
-poetry run python scripts/find_template_violations.py /path/to/downstream/app/backend --template-repo backend
-poetry run python scripts/find_template_violations.py /path/to/downstream/app/frontend --template-repo frontend
+python3 scripts/find_template_violations.py /path/to/downstream/app --template-repo .
+python3 scripts/find_template_violations.py /path/to/downstream/app/backend --template-repo backend
+python3 scripts/find_template_violations.py /path/to/downstream/app/frontend --template-repo frontend
 ```
 
 The script reads `copier.yml` and the app's `.copier-answers.yml` to automatically determine which files are template-owned, app-owned, and feature-flag-excluded. It detects drift using two methods:
@@ -50,8 +50,8 @@ For changes that belong in the template:
 3. Run the template test suites:
    ```bash
    cd test-app
-   poetry run pytest ../tests/ -v
-   poetry run pytest tests/ -v
+   uv run pytest ../tests/ -v
+   uv run pytest tests/ -v
    ```
 4. Validate flag combinations with `ruff check` (at minimum: minimal, all-on).
 5. **Update `changelog.md`** with what changed and migration steps (see [Changelog Discipline](#changelog-discipline) below).
@@ -92,10 +92,10 @@ With the template updated (Phases 2-3 complete):
 1. **Read `changelog.md`** to understand all template changes and their migration steps. This is the primary guide for what needs to happen during the update.
 2. Run `copier update` per component — root, backend, frontend — each against a clean working tree, committing between them since copier needs the whole monorepo's tree clean:
    ```bash
-   # copier lives in the backend template's Poetry env, in the modern-app tool
+   # copier lives in the backend template's uv project, in the modern-app tool
    # container. Run it from the component's directory: copier resolves the
    # relative _src_path in .copier-answers.yml against the current directory.
-   COPIER="cexec modern-app poetry -P /work/ModernAppTemplate/backend run copier update --trust --defaults"
+   COPIER="cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults"
    cd /work/<App>          && $COPIER && git add -A && git commit -m "Update to root template vX.Y.Z"
    cd /work/<App>/backend  && $COPIER && git add -A . && git commit -m "Update to backend template vX.Y.Z"
    cd /work/<App>/frontend && $COPIER && git add -A . && git commit -m "Update to frontend template vX.Y.Z"
@@ -125,7 +125,7 @@ by `copier update`) or **app-owned** (`_skip_if_exists`, never overwritten).
 
 ### NEVER modify these files directly
 Template-owned files are determined by `copier.yml` in the template repo. Run
-the violation finder to check: `poetry run python scripts/find_template_violations.py .`
+the violation finder to check: `python3 scripts/find_template_violations.py .`
 
 ### Where to put app-specific code instead
 | Need | Put it in | Hook/mechanism |
@@ -165,7 +165,7 @@ Every template change that affects downstream apps **must** get a changelog entr
 
 Good migration steps are specific and actionable:
 - "Run `copier update` — this file is template-maintained and will be updated automatically"
-- "After update, add `new-package` to your `pyproject.toml` and run `poetry lock && poetry install`"
+- "After update, add `new-package` to your `pyproject.toml` and run `uv lock && uv sync`"
 - "Move any custom logic from `database.py` into `startup.py:post_migration_hook()`"
 
 ### 2. When running `copier update`: read the entries
@@ -203,7 +203,7 @@ Add the template ownership section shown in Phase 5 above. This gives Claude (an
 
 ### Process check after feature work
 After completing a feature in a downstream app, before merging:
-1. Run `poetry run python scripts/find_template_violations.py .` from the template repo
+1. Run `python3 scripts/find_template_violations.py .` from the template repo
 2. If any violations → classify into the three buckets and act accordingly
 3. This can be a PR review checklist item
 

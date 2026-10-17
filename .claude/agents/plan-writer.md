@@ -95,8 +95,8 @@ Your plans should follow this structure:
 
 ## 7. Verification Steps
 1. Regenerate test-app
-2. Run template tests (poetry run pytest ../tests/ -v)
-3. Verify linting passes (poetry run ruff check .)
+2. Run template tests (uv run pytest ../tests/ -v)
+3. Verify linting passes (uv run ruff check .)
 4. ...
 ```
 

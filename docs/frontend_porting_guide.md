@@ -36,7 +36,7 @@ Generate a fresh skeleton and compare the resolved versions:
 
 ```bash
 cd /work/ModernAppTemplate/frontend
-poetry run copier copy . /tmp/skeleton --trust --defaults \
+uv run --project ../backend copier copy . /tmp/skeleton --trust --defaults \
   -d project_name=throwaway -d project_title=X \
   -d author_name=x -d author_email=x@x.com \
   -d use_oidc=true -d use_s3=true -d use_sse=true
@@ -129,7 +129,7 @@ Commit all preparation changes. The source app should now be at the latest depen
 
 ```bash
 cd /work/ModernAppTemplate/frontend
-poetry run copier copy . /tmp/skeleton --trust --defaults \
+uv run --project ../backend copier copy . /tmp/skeleton --trust --defaults \
   -d project_name=throwaway \
   -d project_title="Throwaway" \
   -d author_name="x" \
@@ -182,7 +182,7 @@ Any remaining differences need to be handled during porting (see Phase 4.13).
 
 ```bash
 cd /work/ModernAppTemplate/frontend
-poetry run copier copy . /work/<App>-new/frontend --trust --defaults \
+uv run --project ../backend copier copy . /work/<App>-new/frontend --trust --defaults \
   -d project_name=<app-name> \
   -d project_title="<App Title>" \
   -d project_description="<Description>" \

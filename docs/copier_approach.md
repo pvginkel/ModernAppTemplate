@@ -58,9 +58,9 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
 
 `validate.sh` does not exist — it was planned but never added to this repo. Validation is done per template instead:
 
-- **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `poetry run pytest ../tests/ -v && poetry run pytest tests/ -v` (plus ruff/mypy/vulture).
+- **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `uv run pytest ../tests/ -v && uv run pytest tests/ -v` (plus ruff/mypy/vulture).
 - **Frontend**: `cexec modern-app bash regen.sh`, then in `test-app`: `pnpm run check && pnpm run build`.
-- **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app`: `poetry run ruff check scripts tools && poetry run run-suite --suite backend`.
+- **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app`: `uv run ruff check scripts tools && uv run run-suite --suite backend`.
 
 If all three pass, the change is safe to port to downstream apps.
 
@@ -71,7 +71,7 @@ The root template generates the monorepo layer that wraps the backend and fronte
 Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `sse_gateway_port` (default `frontend_port` + 2), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
 
 Template-owned (updated by `copier update`):
-- `Jenkinsfile` — validation Job on `registry:5000/kube-coder-modern-app-toolchain:node-24` (the `modern-app` sidecar's image; no browser, `run-suite` downloads Chromium) running `poetry run run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
+- `Jenkinsfile` — validation Job on `registry:5000/kube-coder-modern-app-toolchain:node-24` (the `modern-app` sidecar's image; no browser, `run-suite` downloads Chromium) running `uv run --no-sync run-suite`, a RustFS S3 sidecar when `use_s3`, kaniko builds of both images, `cicd.writeVersionPins` into the Argo CD deploy repo
 - `tools/suite_runner/` — the `run-suite` test orchestrator, same command locally and in CI
 - `Procfile.dev`
 - `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
@@ -80,14 +80,14 @@ Template-owned (updated by `copier update`):
 - `.vscode/settings.json`
 
 Generated once (`_skip_if_exists`):
-- `pyproject.toml` — root Poetry project with honcho, psutil, pinned ruff and `[tool.ruff]`
+- `pyproject.toml` — root uv project with honcho, psutil, pinned ruff and `[tool.ruff]`
 - `CLAUDE.md` — skeleton with a template-ownership table
 - `<repo_name>.code-workspace`
 - `scripts/regenerate-openapi.py`
 - `.kubecoder/config.yaml`
 - `.kubecoder/project.yaml`
 
-Hook: the suite runner runs `backend/scripts/wait-for-services.py` (under the backend's Poetry venv) after the backend install when that file exists — for CI sidecars that are slow to come up.
+Hook: the suite runner runs `backend/scripts/wait-for-services.py` (under the backend's uv venv) after the backend install when that file exists — for CI sidecars that are slow to come up.
 
 ---
 
@@ -334,7 +334,7 @@ Hand-written domain files in `test-app-domain/` copied into the generated `test-
 3. `test-app/` is now a complete working app
 
 ### Mother project tests
-Infrastructure tests in `tests/` (outside test-app) validate template infrastructure. They run from inside test-app's poetry environment: `cd test-app && python -m pytest ../tests/ -v`. This ensures the generated infrastructure works correctly.
+Infrastructure tests in `tests/` (outside test-app) validate template infrastructure. They run from inside test-app's uv environment: `cd test-app && uv run pytest ../tests/ -v`. This ensures the generated infrastructure works correctly.
 
 ### Flag combination validation
 A script that generates projects with all key flag combinations and verifies `py_compile` succeeds on every `.py` file. Catches Jinja rendering errors, missing imports, and dependency issues across all combinations.
@@ -408,7 +408,7 @@ cd /work/ModernAppTemplate/backend
 
 # 1. Regenerate test-app
 rm -rf test-app
-poetry run copier copy . test-app --trust \
+uv run copier copy . test-app --trust \
   -d project_name=test-app \
   -d project_description="Test application" \
   -d author_name="Test Author" \
@@ -437,9 +437,9 @@ cp test-app-domain/alembic/versions/001_create_items.py test-app/alembic/version
 echo "# Test App" > test-app/README.md
 
 # 3. Install and test
-cd test-app && poetry install
-python -m pytest ../tests/ -v      # Mother project tests
-python -m pytest tests/ -v          # Domain tests
+cd test-app && uv sync
+uv run pytest ../tests/ -v      # Mother project tests
+uv run pytest tests/ -v          # Domain tests
 ```
 
 ---

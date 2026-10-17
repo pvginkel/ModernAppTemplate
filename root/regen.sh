@@ -13,11 +13,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$SCRIPT_DIR"
 
+# The sidecar's uv cache and /work are different mounts, so hardlinks fail.
+export UV_LINK_MODE=copy
+
 echo "==> Removing old test-app..."
 rm -rf test-app
 
 echo "==> Running copier copy..."
-(cd "$REPO_ROOT/backend" && poetry run copier copy "$REPO_ROOT" "$SCRIPT_DIR/test-app" --trust --defaults --vcs-ref HEAD \
+(cd "$REPO_ROOT/backend" && uv run --locked copier copy "$REPO_ROOT" "$SCRIPT_DIR/test-app" --trust --defaults --vcs-ref HEAD \
   -d project_name=test-app \
   -d repo_name=TestApp \
   -d project_description="Test application" \
@@ -45,10 +48,10 @@ done
 rm -f test-app/frontend/.env.test
 
 echo "==> Installing root dependencies..."
-cd test-app && poetry install -q
+cd test-app && uv sync -q
 
 echo ""
 echo "Done. Validate with:"
 echo "  cd test-app"
-echo "  poetry run ruff check scripts tools"
-echo "  poetry run run-suite --suite backend"
+echo "  uv run ruff check scripts tools"
+echo "  uv run run-suite --suite backend"
