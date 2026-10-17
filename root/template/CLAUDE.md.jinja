@@ -17,7 +17,8 @@ commands need `cexec modern-app`. The root and `backend/` are two uv projects, e
 `uv.lock`; `kc project setup` writes both on a fresh app, and they are committed, because CI and the
 image sync `--locked`. `scripts/dev.py` starts the dev stack and `scripts/dev.py stop`
 stops it from another shell. After a backend API change, `scripts/regenerate-openapi.py --frontend`
-refreshes the frontend's OpenAPI cache and client.
+refreshes the frontend's OpenAPI cache and client. `cexec modern-app python3 scripts/check_updates.py`
+reports the dependencies with a newer release, major, minor and patch, in every component it finds.
 
 ## Template ownership
 

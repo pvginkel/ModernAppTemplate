@@ -77,6 +77,7 @@ Template-owned (updated by `copier update`):
 - `Procfile.dev`
 - `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
 - `scripts/dev-sse-gateway.sh` — only with `use_sse`; runs the `ssegateway` npm package from `frontend/node_modules`
+- `scripts/check_updates.py` — the dependency-update report (stdlib only): finds every directory with a `uv.lock` (`uv tree --outdated --depth 1 --frozen`) or a `package.json` (`pnpm outdated`), and classifies each newer release as major, minor or patch; `--json` for a machine-readable report
 - `.gitignore`
 - `.vscode/settings.json`
 
