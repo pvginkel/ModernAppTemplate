@@ -10,7 +10,7 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 ## 2026-10-17 — Root v0.2.0, Backend v0.14.0, Frontend v0.21.0
 
-The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered by `docs/da_port_plan.md` (phases 1–10), plus the move of all three templates to uv. The three releases ship together, and an app takes them in one sync. The first section is the sync's checklist, in the order a sync runs. The sections after it say what changed, and each points back at its steps. The plan's phase log has the long per-app detail (file and line numbers, survey results). An app still on an older release (FieldnotesApp: root v0.1.2, frontend v0.20.2) reads the older entries too.
+The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered by `docs/da_port_plan.md` (phases 1–10), plus the move of all three templates to uv. The three releases ship together, and an app takes them in one sync. The first section is the sync's checklist, in the order a sync runs. The sections after it say what changed, and each points back at its steps. The plan's phase log has the long per-app detail (file and line numbers, survey results). Every app is more than one release behind: IoT, EI, DHCPApp and ZigbeeControl are on root v0.1.3, backend v0.13.2 and frontend v0.20.3, FieldnotesApp on v0.1.2, v0.13.2 and v0.20.2, and PilotApp on v0.1.6, v0.13.3 and v0.20.4. So a sync reads every entry after its `_commit`, not this one alone.
 
 ### Syncing an app to this release
 
