@@ -181,6 +181,7 @@ All infrastructure code. Developers should not edit these:
 
 - `tests/conftest_infrastructure.py` — infrastructure fixtures (PostgreSQL test databases, app factory, client, session, OIDC mocking). Template-owned, overwritten on update. The app's `tests/conftest.py` imports from this.
 - `tests/test_database_schema.py` — schema tests (`use_database`): the run's database is at the Alembic head, and the models match the revisions. Template-owned.
+- `tests/test_openapi_cache.py` — fails when the committed `../frontend/openapi-cache/openapi.json` differs from the backend's OpenAPI document, which it builds in a subprocess (Spectree documents only a process's first app); skips where no frontend sits beside the backend. Template-owned.
 
 ---
 
@@ -509,6 +510,7 @@ uv run pytest tests/ -v          # Domain tests
 - `tests/__init__.py` — empty
 - `tests/conftest_infrastructure.py.jinja` — infrastructure fixtures (template-owned)
 - `tests/test_database_schema.py` — schema tests (template-owned, `use_database`)
+- `tests/test_openapi_cache.py` — the frontend's OpenAPI cache matches the backend (template-owned)
 - `tests/conftest.py` — app fixture scaffold (`_skip_if_exists`)
 - `tests/test_smoke.py` — liveness smoke test (`_skip_if_exists`)
 
