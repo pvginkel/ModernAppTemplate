@@ -40,9 +40,11 @@ projects:
     test:
       - cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/'
       - cexec modern-app sh -c 'cd test-app && uv run pytest tests/'
-    # test-app's own `uv run check` minus its pytest step, which is `test:`.
+    # test-app's own `uv run check` minus its pytest step, which is `test:`,
+    # plus `ruff format --check`: the template's Python formats clean.
     lint:
       - cexec modern-app sh -c 'cd test-app && uv run ruff check .'
+      - cexec modern-app sh -c 'cd test-app && uv run ruff format --check .'
       - cexec modern-app sh -c 'cd test-app && uv run mypy .'
       - cexec modern-app sh -c 'cd test-app && uv run vulture app/ vulture_whitelist.py --min-confidence 80'
 
