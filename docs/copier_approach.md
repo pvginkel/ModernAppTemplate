@@ -26,14 +26,16 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
 ├── root/                           # Root template
 │   ├── template/                   # Copier template source
 │   ├── regen.sh                    # Root regeneration script (requires backend/frontend regens first)
-│   └── test-app/                   # Generated test application (gitignored, DO NOT edit)
+│   ├── test-app/                   # Generated test application (gitignored, DO NOT edit)
+│   └── test-app-no-storage/        # Same, use_database=false and use_s3=false (gitignored)
 ├── backend/                        # Separate repo checkout → ModernAppBackendTemplate (NOT a submodule)
 │   ├── copier.yml                  # Backend template configuration
 │   ├── template/                   # Copier template source
 │   ├── test-app/                   # Generated test application (DO NOT edit)
+│   ├── test-app-no-storage/        # Same, use_database=false and use_s3=false, no domain (gitignored)
 │   ├── test-app-domain/            # Hand-written domain files for test-app
 │   ├── tests/                      # Mother project tests (infrastructure)
-│   ├── regen.sh                    # Backend regeneration script
+│   ├── regen.sh                    # Backend regeneration script (both test-apps)
 │   └── pyproject.toml              # Dev dependencies (copier, pytest)
 └── frontend/                       # Separate repo checkout → ModernAppFrontendTemplate (NOT a submodule)
     ├── copier.yml                  # Frontend template configuration
@@ -59,9 +61,9 @@ ModernAppTemplate/                  # Parent repo (orchestration, docs, shared s
 
 `validate.sh` does not exist — it was planned but never added to this repo. Validation is done per template instead:
 
-- **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `uv run pytest ../tests/ -v && uv run pytest tests/ -v` (plus ruff/mypy/vulture).
+- **Backend**: `cexec modern-app bash regen.sh`, then in `test-app`: `uv run pytest ../tests/ -v && uv run pytest tests/ -v`, and in `test-app-no-storage`: `uv run pytest tests/ -v` (plus ruff check, `ruff format --check`, mypy and vulture in both). `test-app-no-storage` renders `use_database=false` and `use_s3=false`, as DHCPApp, ZigbeeControl and FieldnotesApp run, with `use_oidc` and `use_sse` on as in all three. It is gitignored and gets no domain files (test-app-domain's Items need the database) and no `.env.test` (those apps have none), so its suite is the template's own, run from the environment alone. The mother suite runs on `test-app` only: its conftest imports the database fixtures.
 - **Frontend**: `cexec modern-app bash regen.sh`, then in `test-app` and in `test-app-no-shell`: `pnpm run check && pnpm run build`. The two test-apps differ only in `use_app_shell` (`true`, and `false` as ZigbeeControl, FieldnotesApp and PilotApp run). `test-app-no-shell` is gitignored and never runs Playwright; `regen.sh` makes it a git repo of its own, because knip reads the `.gitignore` files up to the git root and would otherwise see no files.
-- **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app`: `uv run ruff check scripts tools && uv run run-suite --suite backend`.
+- **Root**: `cexec modern-app bash root/regen.sh` (after the backend and frontend regens above), then in `root/test-app` and in `root/test-app-no-storage`: `uv run ruff check scripts tools && uv run run-suite --suite backend`. `root/test-app` wraps the backend's and the frontend's `test-app`, and is where Playwright runs. `root/test-app-no-storage` renders the root template with `use_database=false` and `use_s3=false` around `backend/test-app-no-storage` and `frontend/test-app-no-shell`; `root/regen.sh` refreshes its frontend's OpenAPI cache from that backend, so the backend suite's `tests/test_openapi_cache.py` compares like with like. Its frontend is never built or run.
 
 If all three pass, the change is safe to port to downstream apps.
 

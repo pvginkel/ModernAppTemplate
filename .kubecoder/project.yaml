@@ -7,8 +7,8 @@
 # So after a template edit, run `kc project build` before `test` or `lint`.
 #
 # Component order is load-bearing: root/regen.sh copies the backend and
-# frontend test-apps into root/test-app, and the backend mother suite takes the
-# SSE gateway from frontend/test-app/node_modules. So root comes last.
+# frontend test-apps into the root test-apps, and the backend mother suite
+# takes the SSE gateway from frontend/test-app/node_modules. So root comes last.
 #
 # backend/test-app and frontend/test-app are tracked in their template repos,
 # and a regen churns their lockfiles and .copier-answers.yml. That churn is the
@@ -16,37 +16,52 @@
 # trees, so `setup` regenerates only a test-app that was never generated here,
 # keyed on a gitignored file regen.sh writes.
 #
-# The frontend has a second test-app, frontend/test-app-no-shell: the same
-# answers with use_app_shell=false, as ZigbeeControl, FieldnotesApp and PilotApp
-# run. It is gitignored, and only built and checked: root/regen.sh copies
-# test-app alone, so Playwright never runs the no-shell variant.
+# Each component has a second test-app, gitignored and built in the same regen:
+# - frontend/test-app-no-shell: use_app_shell=false, as ZigbeeControl,
+#   FieldnotesApp and PilotApp run. Built and checked.
+# - backend/test-app-no-storage: use_database=false and use_s3=false, as
+#   DHCPApp, ZigbeeControl and FieldnotesApp run (use_oidc and use_sse on, as
+#   in all three). A fresh render, without test-app-domain's database-bound
+#   Items domain, so its suite is the template's own.
+# - root/test-app-no-storage: the root template with the same flags, around
+#   those two. Its backend suite runs; Playwright never runs a variant.
 projects:
   backend:
     description: >-
       ModernAppBackendTemplate — the Copier template for Flask backends. Work
       in template/, then `kc project build` to regenerate test-app.
+    # regen.sh renders both test-apps, or only the ones it is given.
     setup:
       # This repo's own uv project: the pinned copier both templates' regens
       # and every app's `copier update` run.
       - cexec modern-app uv sync --locked
-      - test -f test-app/.env.test || cexec modern-app bash regen.sh
+      - test -f test-app/.env.test || cexec modern-app bash regen.sh test-app
+      - test -d test-app-no-storage/.venv || cexec modern-app bash regen.sh test-app-no-storage
       # .env.test is the harness's, not the template's; keep test-app's copy
       # current without a regen.
       - cp .env.test test-app/.env.test
     build: cexec modern-app bash regen.sh
-    # Two runs: the mother suite (../tests) and the domain suite (tests/) share
-    # the module name tests.conftest, so they cannot run in one pytest process.
-    # The mother suite needs the s3storage sidecar (config.yaml).
+    # In test-app, two runs: the mother suite (../tests) and the domain suite
+    # (tests/) share the module name tests.conftest, so they cannot run in one
+    # pytest process. The mother suite needs the s3storage sidecar
+    # (config.yaml). The mother suite is bound to the full render (its
+    # conftest imports the database fixtures), so test-app-no-storage runs its
+    # own suite alone.
     test:
       - cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/'
       - cexec modern-app sh -c 'cd test-app && uv run pytest tests/'
-    # test-app's own `uv run check` minus its pytest step, which is `test:`,
-    # plus `ruff format --check`: the template's Python formats clean.
+      - cexec modern-app sh -c 'cd test-app-no-storage && uv run pytest tests/'
+    # Each test-app's own `uv run check` minus its pytest step, which is
+    # `test:`, plus `ruff format --check`: the template's Python formats clean.
     lint:
       - cexec modern-app sh -c 'cd test-app && uv run ruff check .'
       - cexec modern-app sh -c 'cd test-app && uv run ruff format --check .'
       - cexec modern-app sh -c 'cd test-app && uv run mypy .'
       - cexec modern-app sh -c 'cd test-app && uv run vulture app/ vulture_whitelist.py --min-confidence 80'
+      - cexec modern-app sh -c 'cd test-app-no-storage && uv run ruff check .'
+      - cexec modern-app sh -c 'cd test-app-no-storage && uv run ruff format --check .'
+      - cexec modern-app sh -c 'cd test-app-no-storage && uv run mypy .'
+      - cexec modern-app sh -c 'cd test-app-no-storage && uv run vulture app/ vulture_whitelist.py --min-confidence 80'
 
   frontend:
     description: >-
@@ -70,17 +85,25 @@ projects:
     description: >-
       The root template (root/template, versioned by this repo's tags), plus
       the shared docs, the coordinated changelog and the cross-repo scripts.
-      Its test-app, root/test-app, wraps copies of the backend and frontend
-      test-apps into a complete monorepo.
-    setup: test -d root/test-app || cexec modern-app bash root/regen.sh
+      Its test-apps, root/test-app and root/test-app-no-storage, wrap copies
+      of the backend and frontend test-apps into complete monorepos.
+    # root/regen.sh renders both test-apps, or only the ones it is given.
+    setup:
+      - test -d root/test-app || cexec modern-app bash root/regen.sh test-app
+      - test -d root/test-app-no-storage || cexec modern-app bash root/regen.sh test-app-no-storage
     build: cexec modern-app bash root/regen.sh
-    # The generated monorepo's suite runner, as CI's validation Job runs it.
+    # The generated monorepos' suite runner, as CI's validation Job runs it.
     # Backend suite only. `--suite frontend` (the frontend template's
-    # Playwright specs) passes, but runs the modern-app sidecar up to its
-    # 5 GiB memory limit, and one run took the container down. Run it by hand:
+    # Playwright specs, test-app only) passes, but runs the modern-app sidecar
+    # up to its 5 GiB memory limit, and one run took the container down. Run it
+    # by hand:
     #   cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite frontend'
-    test: cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite backend'
-    lint: cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools'
+    test:
+      - cexec modern-app sh -c 'cd root/test-app && uv run run-suite --suite backend'
+      - cexec modern-app sh -c 'cd root/test-app-no-storage && uv run run-suite --suite backend'
+    lint:
+      - cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools'
+      - cexec modern-app sh -c 'cd root/test-app-no-storage && uv run ruff check scripts tools'
 
   guide:
     description: >-

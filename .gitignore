@@ -10,5 +10,6 @@ node_modules
 /.pnpm-store
 /test_results.md
 /root/test-app
+/root/test-app-no-storage
 /guide/.venv/
 /guide/site/

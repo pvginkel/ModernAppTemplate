@@ -19,7 +19,8 @@ ModernAppTemplate/                  # Parent repo (you are here) — also the ro
 ├── root/                           # Root template source and test-app
 │   ├── template/                   # Copier template source
 │   ├── regen.sh                    # Root regeneration script (run after backend/frontend regens)
-│   └── test-app/                   # Generated test application (gitignored, DO NOT edit)
+│   ├── test-app/                   # Generated test application (gitignored, DO NOT edit)
+│   └── test-app-no-storage/        # The same with use_database=false, use_s3=false (gitignored)
 ├── scripts/                         # Cross-repo tooling (violation finder, test/pull/push/review-all, workspace helpers)
 │   └── find_template_violations.py # Finds template drift in downstream apps
 ├── changelog.md                    # Coordinated changelog (all three templates)
@@ -74,9 +75,10 @@ Read these before making changes:
 ### Working on the backend template
 ```bash
 cd /work/ModernAppTemplate/backend
-# Edit files in template/, then:
+# Edit files in template/, then (regen.sh renders test-app and test-app-no-storage):
 cexec modern-app bash regen.sh
 cexec modern-app sh -c 'cd test-app && uv run pytest ../tests/ -v && uv run pytest tests/ -v'
+cexec modern-app sh -c 'cd test-app-no-storage && uv run pytest tests/ -v'
 ```
 
 ### Working on the frontend template
@@ -91,23 +93,42 @@ cexec modern-app sh -c 'cd test-app-no-shell && pnpm run check && pnpm run build
 ### Working on the root template
 ```bash
 cd /work/ModernAppTemplate
-# Edit files in root/template/, then (backend and frontend regens must run first):
+# Edit files in root/template/, then (backend and frontend regens must run first;
+# root/regen.sh renders root/test-app and root/test-app-no-storage):
 cexec modern-app bash root/regen.sh
 cexec modern-app sh -c 'cd root/test-app && uv run ruff check scripts tools && uv run run-suite --suite backend'
+cexec modern-app sh -c 'cd root/test-app-no-storage && uv run ruff check scripts tools && uv run run-suite --suite backend'
 ```
 
 ### Validating both templates
 
 `kc project build` regenerates all the test-apps (backend, frontend, root, in
 that order); `kc project test` and `kc project lint` then run the gates above
-against them. The frontend has two: `test-app` (`use_app_shell=true`) and
-`test-app-no-shell` (`use_app_shell=false`, as ZigbeeControl, FieldnotesApp and
-PilotApp run), and `build` and `lint` check both. Only `test-app` goes into the
-root test-app, so Playwright runs the shell variant alone. `validate.sh`,
-described in `docs/copier_approach.md`, was never added to this repo. The
-regens churn the tracked `test-app/` lockfiles and `.copier-answers.yml` in
-`backend/` and `frontend/`; commit that with the template change or discard it.
-`frontend/test-app-no-shell` is gitignored, so it churns nothing.
+against them. Each component renders two:
+
+- **`test-app`**, every flag on (`use_database`, `use_s3`, `use_oidc`,
+  `use_sse`, `use_app_shell`), with the hand-written domains from
+  `test-app-domain/`. `root/test-app` wraps the backend's and the frontend's,
+  and Playwright runs there.
+- **The variants**, gitignored, so they churn nothing:
+  - `frontend/test-app-no-shell`: `use_app_shell=false`, as ZigbeeControl,
+    FieldnotesApp and PilotApp run. `build` and `lint` check it.
+  - `backend/test-app-no-storage`: `use_database=false` and `use_s3=false`, as
+    DHCPApp, ZigbeeControl and FieldnotesApp run, with `use_oidc` and
+    `use_sse` on, as all three have them. A fresh render without the
+    database-bound Items domain: `test` runs its own suite (the mother suite
+    needs the full render), and `lint` runs ruff check, `ruff format --check`,
+    mypy and vulture on it, as on `test-app`.
+  - `root/test-app-no-storage`: the root template with the same flags, around
+    `backend/test-app-no-storage` and `frontend/test-app-no-shell` (two of the
+    three apps run without the shell). `root/regen.sh` refreshes its
+    frontend's OpenAPI cache from that backend. `test` runs its backend suite
+    and `lint` its ruff check; no Playwright.
+
+`validate.sh`, described in `docs/copier_approach.md`, was never added to this
+repo. The regens churn the tracked `test-app/` lockfiles and
+`.copier-answers.yml` in `backend/` and `frontend/`; commit that with the
+template change or discard it.
 
 ### Syncing a downstream app
 
