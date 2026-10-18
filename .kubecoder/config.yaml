@@ -40,6 +40,9 @@ tools:
   # kubectl (with Helm and Terraform) for reading the prd cluster: the Argo CD
   # syncs that follow a push of the apps and their deploy repos.
   - use: iac
+  # arch-validate and the other architecture-as-code gates, for the apps'
+  # architecture models and the deploy repos' lint.
+  - use: aac-tools
 
 # kaniko, to prove the apps' and the base images' Dockerfiles before a push.
 imageBuilder: true
