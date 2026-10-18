@@ -8,6 +8,185 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-10-18 — Root v0.2.1, Backend v0.15.0, Frontend v0.22.0
+
+Follow-ups to the DesignAssistant port, from the six app syncs to the previous release: cards MAT-16 and MAT-18 to MAT-27. The three releases ship together, and an app takes them in one sync. All six apps are on root v0.2.0, backend v0.14.0 and frontend v0.21.0, so a sync reads this entry alone. The first section is the sync's checklist, in the order a sync runs; the sections after it say what changed, and each points back at its steps. (EI = ElectronicsInventory, IoT = IoTSupport. The database apps are EI, IoT and PilotApp.)
+
+### Syncing an app to this release
+
+**What changed:** everything in the sections below. **From this release on, `copier update` leaves every app-owned (`_skip_if_exists`) file alone in `backend/` and `frontend/`, edited or not, as it always did at the root** (MAT-16). The previous syncs' merge hunks, conflicts and `.rej` files in app-owned files are gone, and so is that route for a template change: a change the template makes to an app-owned file reaches the app only through a step below. The violation finder's app-owned section lists those files per app, and every file on its *take by hand* and *merge by hand* lists has a step here. Conflicts are now in template-owned files only.
+
+**Migration steps:**
+
+1. **Run the violation finder, all three components, before the updates.** From `/work/ModernAppTemplate`, with each component's new tag:
+   ```bash
+   FINDER="cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py"
+   $FINDER /work/<App> --template-repo . --new-ref v0.2.1
+   $FINDER /work/<App>/backend --template-repo backend --new-ref v0.15.0
+   $FINDER /work/<App>/frontend --template-repo frontend --new-ref v0.22.0
+   ```
+   Keep its app-owned lists for steps 5 and 8. At the tags they were:
+   - Root: nothing, in all six.
+   - Backend: `app/app_config.py`, `app/exceptions.py`, `app/services/container.py` and `tests/conftest.py` in every app, on *merge by hand* or *take by hand* (DHCPApp's `exceptions.py`, FieldnotesApp's and PilotApp's `conftest.py`), except where *already current* (FieldnotesApp's `exceptions.py`, PilotApp's `app_config.py` and `exceptions.py`). Step 5.
+   - Frontend: `package.json` and `tests/support/fixtures.ts` in every app (FieldnotesApp's and PilotApp's `package.json` *already current*, PilotApp's `fixtures.ts` *take by hand*), and `eslint.app.config.js` *new, app has none*. DHCPApp also lists its deleted `public/favicon.png`. Step 8.
+
+   A file on either list that this checklist doesn't name is a changelog gap: take the template's change from `--diff`, and report it.
+
+   Its template-owned report is the app's drift at the old release, which Phase 1 of `docs/downstream_sync_process.md` classifies. Beyond the standing edits in that file's status table, it found: IoT `.gitignore` (root +3, backend +4, frontend +2) and `frontend/knip.config.ts` +2; EI root `.gitignore` +2, `backend/app/schemas/upload_document.py` (step 3), and in `frontend/` `.gitignore` +3, `knip.config.ts` -6 (dropped `ignoreDependencies`), `scripts/generate-api.js`, `src/components/primitives/alert.tsx` and `list-section-header.tsx` (doc-comment examples), `src/components/ui/status-badge.tsx` and `src/lib/api/api-error.ts`; ZigbeeControl root `.gitignore` +1; DHCPApp `frontend/index.html` and `src/components/layout/top-bar.tsx` (its `favicon.svg`); PilotApp `backend/scripts/init-dev-database.py` (step 3 settles it); IoT's and EI's deleted `backend/alembic/versions/.gitkeep` (harmless). Apart from the two step 3 names, none of these files changed in this release, so none conflicts.
+2. **Root `copier update`** (v0.2.1). Commit. It brings `tools/suite_runner/local.py` and the new `tools/suite_runner/junit.py`; no app-owned file changes, and no app has an edit there to conflict with. Every `copier update` still needs a clean tree and runs from the component's directory:
+   ```bash
+   cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+   ```
+3. **Backend `copier update`** (v0.15.0). Commit.
+   - The update rewrites most template-owned Python files, in layout only (ruff format, MAT-20 item 5). An app's edit to such a file conflicts on the reformatted lines. Two apps have one:
+     - EI: `app/schemas/upload_document.py` (its `detected_type: AttachmentType | None` and the `AttachmentType` import, drift rather than a recorded standing edit). Resolve to the template's formatted layout with EI's type, or drop the drift.
+     - PilotApp: `scripts/init-dev-database.py` conflicts at the `CREATE DATABASE` line. Take the template's side: the file then equals the render, since the template took Pilot's `07a5049` (MAT-24). Step 9 settles `CLAUDE.md`.
+   - IoT, DHCPApp, ZigbeeControl and FieldnotesApp equal the v0.14.0 render in every template-owned Python file, so their update applies without a conflict. (The release's tag check, in scratch clones of EI and PilotApp: each update conflicted in exactly the files named here, and touched no app-owned file but the new `eslint.app.config.js`.)
+   - Expect no hunk, conflict or `.rej` file in an app-owned file. One means that file's entry lacks its `backend/` twin in `copier.yml`: keep the app's version, delete the `.rej`, and report it as a template bug.
+4. **Frontend `copier update`** (v0.22.0). Commit, with the new `eslint.app.config.js`.
+   - Every app gets `frontend/eslint.app.config.js`, an empty array with a commented example (MAT-18). The update creates it. Commit it. For IoT, DHCPApp, ZigbeeControl, FieldnotesApp and PilotApp, nothing else changes there: their `eslint.config.js` is the plain template file.
+   - EI: `eslint.config.js` conflicts at the imports, where EI's two role-gating imports sit right after the `no-route-mocks.js` import and the template adds `import appConfig`. The two role-gating config blocks may come through without a conflict, since their context is unchanged, so look for them. Resolve the file to the template's own: no role-gating imports or blocks left, and nothing in `git diff` against a fresh render. Step 7 moves the rules.
+   - DHCPApp: delete the re-created `public/favicon.png` again.
+   - Delete any `frontend/.env.example.rej` an earlier sync left (gitignored litter; none was found in the six apps). Step 3's rule about app-owned conflicts holds here too, with the `frontend/` twin.
+5. **Backend app-owned files: nothing required.** The finder lists four (step 1). `app/app_config.py`, `app/exceptions.py` and `app/services/container.py` changed in layout only (ruff format: wrapped lines, and the thumbnail path as `Path(tempfile.gettempdir(), "<name>-thumbnails",)` in the S3 apps' `app_config.py`), with no behaviour change. An app that runs `ruff format` (FieldnotesApp, PilotApp) already holds its own copies to the formatter, so leave all three as they are. `tests/conftest.py` gained a docstring paragraph: a process the suite starts (`tests/test_openapi_cache.py`'s) builds its app from the environment and `.env` alone, so a setting only a fixture gives needs `os.environ.setdefault("MY_SETTING", "value")` at the top of `tests/conftest.py`. Optional; ZigbeeControl already has such a default (`APP_TABS_CONFIG`). Copy the paragraph from the template's `template/tests/conftest.py` if wanted.
+6. **FieldnotesApp and PilotApp: drop the ruff format exclude.** In `backend/pyproject.toml`, delete the `[tool.ruff.format]` section with its `exclude` list and the comment above it ("The template-owned files the ModernAppTemplate ships unformatted at this line length…"). Every file on both lists is template-owned, and step 3 makes each equal the new render, which is format-clean under their settings. Then `uv run ruff format --check .` in `backend/` must pass (checked on the renders: FieldnotesApp 53 files, PilotApp 65). EI, IoT, DHCPApp and ZigbeeControl don't run `ruff format`; nothing asks them to.
+7. **EI: the role-gating rules move to `frontend/eslint.app.config.js`.** Replace the rendered empty array with EI's two blocks, moved unchanged. They now come after the template's `tests/**` block instead of before it; the globs don't overlap (`src/**` and `tests/**`), so lint behaves the same.
+   ```js
+   // The app's own ESLint config blocks. The template's eslint.config.js
+   // (template-owned) spreads this array after its own blocks, so a block here
+   // can add an app's rules or override the template's. This file is app-owned:
+   // copier writes it once and never updates it.
+
+   import roleImportEnforcementRule from './scripts/eslint-rules/role-import-enforcement.js'
+   import gateUsageEnforcementRule from './scripts/eslint-rules/gate-usage-enforcement.js'
+
+   export default [
+     {
+       files: ['src/**/*.{ts,tsx}'],
+       plugins: {
+         'role-gating': {
+           rules: {
+             'role-import-enforcement': roleImportEnforcementRule,
+             'gate-usage-enforcement': gateUsageEnforcementRule,
+           },
+         },
+       },
+       rules: {
+         // Every mutation hook import must be paired with its role constant.
+         // Gate is wired into all UI pages -- see docs/features/role_gating_wiring/.
+         'role-gating/role-import-enforcement': 'error',
+       },
+     },
+     {
+       // Every role constant imported in a component file must be used in
+       // <Gate requires={...}> or hasRole(...). Applies only to TSX files
+       // (hook files import role constants next to mutation hooks without JSX).
+       files: ['src/**/*.tsx'],
+       rules: {
+         'role-gating/gate-usage-enforcement': 'error',
+       },
+     },
+   ]
+   ```
+   - In the root `CLAUDE.md`, "Template ownership": replace the paragraph's first three sentences, from "One edit stands in a template-owned file…" through "The template has no hook for app lint rules yet.", with: "No edit stands in a template-owned file. EI's `role-gating` lint rules (`scripts/eslint-rules/role-import-enforcement.js` and `gate-usage-enforcement.js`) are configured in app-owned `frontend/eslint.app.config.js`, which the template's `eslint.config.js` spreads after its own blocks." Keep the sentence about the violation finder's older drift.
+   - `frontend/scripts/eslint-rules/gate-usage-enforcement.js`, line 17: the header says hook files "are excluded via the eslint.config.js file glob"; make it `eslint.app.config.js`.
+   - `pnpm run check` is the gate: no role-gating error lost, and no new one.
+8. **Frontend app-owned files.**
+   - `package.json`: the template asks for `eslint-plugin-react-hooks` `^7.1.1` (it asked `^7.0.1`). All six already ask `^7.1.1` and lock 7.1.1, from the previous sync's step 12: nothing to do.
+   - `tests/support/fixtures.ts`: the template dropped its `/* eslint-disable react-hooks/rules-of-hooks */`, which disables nothing in a file that defines no fixture (eslint warned "Unused eslint-disable directive"), and its header now says when to put it back. PilotApp's file is still the old render and defines no fixture: replace it with the template's (`template/tests/support/fixtures.ts`), which clears the warning. EI, IoT, DHCPApp, ZigbeeControl and FieldnotesApp define fixtures, so their directive is used: keep the file as it is.
+9. **PilotApp: the standing edit is the template's own.** In the root `CLAUDE.md`, the paragraph that lists standing edits: replace "One stands today: `backend/scripts/init-dev-database.py` creates the dev database in production's locale (ICU `und`, `C`), as the test suites create theirs, and reports an existing one in another locale." with "None stands today.", and add `backend/scripts/init-dev-database.py` (production's locale, backend v0.15.0) to the next sentence's list of edits that are now the template's own. Step 6 removes the script's format exclude with the rest.
+10. **Backend tests that assert the old error bodies** (MAT-25):
+    - EI, `backend/tests/api/test_testing.py`: `test_send_task_event_no_connection` asserts 400; it is now 404 (`"nonexistent-connection" in payload["error"]` still holds). `test_send_task_event_send_failure` asserts 400 and `"Failed to send event"`; it is now 502, with `error` "Cannot send the task event to SSE connection test-connection because external service failed: the SSE Gateway did not deliver it". Update the docstrings with them.
+    - PilotApp, `backend/tests/test_sse_callback.py`: `assert_refused` asserts `response.get_json() == {"error": "Unauthorized"|"Forbidden"}`. Assert the envelope's code instead, as the template's `tests/api/test_sse_callback.py` does: `response.get_json()["code"] == "AUTHENTICATION_REQUIRED"` for 401 and `"AUTHORIZATION_FAILED"` for 403. Its role cases fail until then.
+    - FieldnotesApp's and PilotApp's `tests/test_access_log.py` post to `/api/sse/callback` without a body: still 400, only the body differs, and they assert the access log only. Nothing to do.
+11. **Refresh the frontend's OpenAPI cache** (every app), after the backend update: `python3 scripts/regenerate-openapi.py --frontend` at the root, and commit `frontend/openapi-cache/openapi.json`. Until then the backend's `tests/test_openapi_cache.py` fails. The document changes `/api/sse/callback`, the three `/api/tasks/{task_id}` routes, `/api/testing/sse/task-event` and `/api/testing/sse/force-callback-error`, and the generated client gains `TaskInfo`, `TaskActionResponse` and `ApiErrorResponseSchema` and loses `TestErrorResponseSchema` (no app imports it). Run `tsc` after `pnpm generate:api:build && pnpm generate:routes` (or `pnpm build`).
+12. **EI (recommended): its two action scopes opt out of the mount-time `ready`** (MAT-20 item 1). Pass `readyOnMount: false` to `useUiStateInstrumentation()` in `src/hooks/use-pick-list-execution.ts:298` (`pickLists.detail.execution`) and `src/hooks/use-pick-list-line-quantity-update.ts:211` (`pickLists.detail.quantityEdit`). Its data scopes keep the default: `kits.detail.links` (`kit-detail.tsx:120`), `pickLists.detail.load` and `pickLists.detail.availability` (`pick-list-detail.tsx:122`, `:138`). The specs pass unchanged, since they already wait on the `ready` whose metadata names the action; their comments become wrong, so reword or drop them: `tests/e2e/pick-lists/pick-list-detail.spec.ts:8-12` (`waitForActionReady`'s doc comment, "The action scopes also emit a metadata-less `ready` when the page mounts idle…"; keep the helper, which is stricter) and `tests/e2e/kits/kit-detail.spec.ts:644-645`.
+13. **EI: its run-suite docs** (MAT-22). `docs/commands.md` (about l.42, "note it records only `PASS`/`FAIL` per step, never a count") and `docs/slice-test-plan.md` (about l.46, "`run-suite --output-mode simple` reports only `PASS`/`FAIL` per step. If a count is wanted, run the underlying command once directly…") become wrong. Say instead that the summary's "test counts" block and `test_results.md`'s step headings carry each suite's passed, failed and skipped counts, and drop the advice to re-run for a count. `docs/commands.md` may add that `--junitxml-dir` works in either output mode. No other app has such text.
+14. **The dev database's locale** (EI, IoT, PilotApp; the operator's call). `scripts/init-dev-database.py` now creates the dev database in production's locale, but leaves an existing one alone and reports it on stderr from `kc project setup`: "Database '<name>' is not in production's locale (ICU 'und', C): drop it and run this again to recreate it". Check with `SELECT datlocprovider, datcollate FROM pg_database WHERE datname = '<database_name>'` (`c`/`en_US.utf8` is the old locale, `i`/`C` the new). Moving it loses the dev data: `DROP DATABASE <database_name>` on the sidecar, then `kc project setup`, and reload any dev data. Ask the operator first. DHCPApp, ZigbeeControl and FieldnotesApp have no database.
+15. **Gates:** the app's `kc project setup`, `build`, `test` and `lint`, its Playwright suite through `uv run run-suite --suite frontend`, and the backend suite once more with `backend/.env` moved aside (as before). The run-suite summary now prints each suite's counts. Specs to watch, with the behaviour changes below: the request ids (MAT-19) in EI's `tests/e2e/sse/task-events.spec.ts` and IoT's `tests/e2e/devices/devices-logs-sse.spec.ts`, which pass the request id to the backend; EI's pick-list and kit-detail specs (step 12). Keep `vulture_whitelist.py`, `knip` and `.codehealthignore` current. Then re-run the finder with `--old-ref` set to the `_commit` each component came from (`v0.2.0`, `v0.14.0`, `v0.21.0`): every app-owned file it lists is *already current*, or on *merge by hand* with its step applied to the app's own edits, and no template-owned file differs from the render but the app's recorded standing edits.
+
+### `copier update` leaves app-owned files alone in `backend/` and `frontend/`
+
+**What changed:** both `copier.yml` files list every `_skip_if_exists` entry twice, as before and again with the `backend/` or `frontend/` prefix (MAT-16). In a monorepo, copier 9.11.3's update re-applies the app's own changes with `git apply --exclude <entry>` at the git toplevel, where the paths carry the component's directory, so the plain entries never matched there: the update three-way merged the template's changes into every app-owned file the app had edited, and left the unedited ones on their old render. The twins match; the plain entries still make the render skip existing files. The update reads the new release's list, so the first sync to this release already leaves app-owned files alone. The root template needs no twins. The frontend list also gains `eslint.app.config.js`. `docs/copier_approach.md` has the mechanism ("How `copier update` treats app-owned files").
+
+**Migration steps:** sync steps 1, 3, 4, 5 and 8.
+
+### The violation finder renders with the app's answers
+
+**What changed:** `scripts/find_template_violations.py` (parent repo only; MAT-23) renders each component's template with the app's own `.copier-answers.yml` through the pinned copier, so it runs under the backend's uv project. It compares every template-owned file, the Jinja-rendered ones included, with the render at the app's `_commit`, and sorts the app-owned files by their render at `_commit`, their render at the release the update takes (`--new-ref`, default the latest tag) and the app's copy: *take by hand*, *merge by hand*, *already current*, new, dropped, deleted by the app. Only files the template tracks count. `docs/downstream_sync_process.md`'s Phases 1 and 4 use it.
+
+**Migration steps:** sync steps 1 and 15.
+
+### The suite runner prints each suite's counts
+
+**What changed:** root, template-owned (`tools/suite_runner/local.py`, new `tools/suite_runner/junit.py`; MAT-22). Every test run (backend pytest, the Playwright dev-server pass, the `@preview` pass) writes a JUnit report in either output mode: into `--junitxml-dir` when given, otherwise a temporary directory. The simple-mode summary adds a "test counts" block, one line per run (`backend pytest: 10 passed, 0 failed, 0 skipped`, or `no report` after a crash), and `test_results.md`'s step headings carry the same counts. "failed" counts failures plus errors, xfail counts as skipped, and a Playwright retry counts once; CI's `===SUITE_RESULT:===` markers read the same reports, unchanged. A stale report is removed before its step runs, and a relative `--junitxml-dir` is made absolute.
+
+**Migration steps:** sync steps 2 and 13.
+
+### SSE callback and testing endpoints raise; the task routes are documented
+
+**What changed:** backend (MAT-25).
+- The SSE Gateway's connect callback (`app/api/sse.py`) raises, so its refusals carry the error envelope (`error`, `details.message`, `code`, `correlationId`): 401 `AUTHENTICATION_REQUIRED` (a bad callback secret, a missing or invalid token, the testing hook's 401), 403 `AUTHORIZATION_FAILED` (a caller the API refuses, the hook's 403), 400 `VALIDATION_FAILED` (no or non-object body, unknown action, missing request id or one with a colon). Every status is as before but one: a JSON array body, a 500, is a 400. The browser sees no change: the gateway never reads a non-2xx callback body, and emits `rejected` with the reason phrase.
+- `POST /api/testing/sse/task-event`: an unknown request id is a 404 `RECORD_NOT_FOUND` ("SSE connection <id> was not found"), and a send the gateway refuses a 502 `EXTERNAL_SERVICE_ERROR`; both were 400 with `{"error", "status"}`. `TestErrorResponseSchema` is gone. `/api/testing/sse/force-callback-error` documents its 204.
+- The task routes carry `@api.validate`: `GET /api/tasks/<id>/status` answers `TaskInfo`, `POST …/cancel` and `DELETE /api/tasks/<id>` `TaskActionResponse` (`{success, message}`), all three 404 `ApiErrorResponseSchema`. `start_time` and `end_time` in the status body are ISO 8601 (`2023-01-01T00:00:00`), no longer HTTP dates.
+
+**Migration steps:** sync steps 10 and 11.
+
+### The version fetch leaves the connect callback; a gateway 404 is a disconnect
+
+**What changed:** backend (MAT-26).
+- `FrontendVersionService` fetches the frontend's `version.json` on a daemon thread per connect, so a slow or down frontend no longer holds the connect up to 2 s. The stage rules are unchanged: a queued version is sent on connect, synchronously, in every stage; a fetched one only outside a local stage, and not if a queued version was broadcast since that connect.
+- When the gateway answers 404 to a send, `SSEConnectionManager` drops the connection as a disconnect does: mappings, identity, the disconnect counter, the `sse_gateway_active_connections` gauge (which used to drift up) and the disconnect observers. Only when the 404's token is still the request id's current one.
+
+**Migration steps:** none. IoT's `DeviceLogStreamService` disconnect observer now also runs when the gateway has lost a connection, which ends that connection's log subscription.
+
+### The dev database in production's locale
+
+**What changed:** backend, `scripts/init-dev-database.py` (`use_database`; MAT-24, PilotApp's `07a5049`) creates the dev database with `TEMPLATE template0 ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LC_COLLATE 'C' LC_CTYPE 'C'`, as the test databases and production have it, where it took the sidecar's libc `en_US.utf8`. An existing database in another locale is reported on stderr and left alone; the script still exits 0.
+
+**Migration steps:** sync steps 3, 9 and 14.
+
+### Backend: ruff format, the signal handler, the OpenAPI cache test
+
+**What changed:** backend (MAT-20 items 5–7).
+- Every Python file the template renders is format-clean under the test-app's ruff settings (ruff 0.15.22, line length 88), checked with each app's answers. Layout only: the rendered ASTs are unchanged. Lines whose layout depended on an answer's length now format alike for any length.
+- `LifecycleCoordinator`'s SIGTERM/SIGINT handler starts a non-daemon thread, `lifecycle-shutdown-<signum>`, which logs the signal and runs the shutdown, and returns at once: logging inside the handler raised `RuntimeError: reentrant call inside <_io.BufferedWriter name='<stderr>'>`. The events, waiters, timeout and exits are the same. In debug mode (the dev stack and every Playwright backend) the Werkzeug server keeps accepting requests during the drain, as Waitress already did. A test that calls `_handle_sigterm()` and asserts the shutdown's effects must `.join()` the thread it returns (no app has one).
+- `tests/test_openapi_cache.py`'s docstring and failure message say its app is built from the environment and `.env` alone, and where a missing setting's default goes; the rendered `tests/conftest.py` says the same.
+
+**Migration steps:** sync steps 3, 5 and 6.
+
+### Frontend: request ids, the app's ESLint hook, action scopes, validation messages
+
+**What changed:** frontend (MAT-18, MAT-19, MAT-20 items 1–4).
+- **SSE request ids** come from `crypto.getRandomValues`, not `Math.random()`: `makeUniqueToken()` in `src/lib/utils/random.ts` (same signature and alphabet, unbiased), which the SharedWorker now imports instead of keeping a copy, and the direct connection's id (`makeUniqueToken(32)`, about 22 characters before). Under OIDC the backend binds an identity to the request id, so a guessable one was a weak handle. FieldnotesApp's NFR-4 holds again.
+- **`eslint.app.config.js`**, app-owned and new: the template-owned `eslint.config.js` imports it and spreads its array last, so an app's block can add rules or override the template's, as `index.css` imports `styles/app-theme.css`.
+- **`useUiStateInstrumentation()`** takes `readyOnMount` (default `true`). An action scope passes `false`, and then emits nothing until its first action's `loading` → `ready`, instead of a metadata-less `ready` when its page opens.
+- **`parseApiError()`** prefixes a validation error's message with its field, the pydantic `loc` joined with dots: "name: Field required", or "Multiple errors: items.0.quantity: Input should be greater than 0, name: Field required". A toast now names the field.
+- `package.json` asks for `eslint-plugin-react-hooks` `^7.1.1`; the rendered `tests/support/fixtures.ts` drops its unused `rules-of-hooks` disable (both app-owned: new apps).
+
+**Migration steps:** sync steps 4, 7, 8, 12 and 15.
+
+### Template gates
+
+**What changed:** this repo only; nothing reaches an app. `kc project build`, `test` and `lint` also render and check a backend and a root test-app with `use_database=false` and `use_s3=false` (`test-app-no-storage`, MAT-27), the shape DHCPApp, ZigbeeControl and FieldnotesApp run, so a break in those paths shows before a sync. The backend lint runs `ruff format --check`. The environment gains the `aac-tools` tool container (MAT-21). The frontend's test-app OpenAPI cache and generated client are refreshed against this backend.
+
+**Migration steps:** none.
+
+### Behaviour users and tests will notice
+
+**What changed:**
+- An error toast for a request that failed validation names the field.
+- The testing endpoint `POST /api/testing/sse/task-event` answers 404 or 502 where it answered 400, with the error envelope; the SSE callback's refusals carry the envelope too (the browser sees no difference).
+- The task status body's `start_time` and `end_time` are ISO 8601.
+- SSE request ids are 32 random characters on every path.
+- An SSE connect no longer waits for the frontend's `version.json`; the fetched version arrives just after the connect, outside a local stage.
+- The active-connections gauge drops when the gateway reports a connection gone, and disconnect observers run then (IoT's log subscriptions end).
+- In the dev stack and Playwright backends, the server keeps answering during a graceful shutdown's drain.
+- A new dev database is created in production's locale; an old one is reported at `kc project setup`.
+- run-suite prints each suite's passed, failed and skipped counts.
+
+**Migration steps:** sync step 15. A test that changes outcome at the sync starts here.
+
 ## 2026-10-17 — Root v0.2.0, Backend v0.14.0, Frontend v0.21.0
 
 The DesignAssistant port: the rulings in `docs/da_port_decisions.md`, delivered by `docs/da_port_plan.md` (phases 1–10), plus the move of all three templates to uv. The three releases ship together, and an app takes them in one sync. The first section is the sync's checklist, in the order a sync runs. The sections after it say what changed, and each points back at its steps. The plan's phase log has the long per-app detail (file and line numbers, survey results). Every app is more than one release behind: IoT, EI, DHCPApp and ZigbeeControl are on root v0.1.3, backend v0.13.2 and frontend v0.20.3, FieldnotesApp on v0.1.2, v0.13.2 and v0.20.2, and PilotApp on v0.1.6, v0.13.3 and v0.20.4. So a sync reads every entry after its `_commit`, not this one alone.
