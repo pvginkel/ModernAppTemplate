@@ -187,16 +187,16 @@ This is especially important because `copier update` only overwrites template-ow
 
 ## Current Status (2026-10-17)
 
-All six apps are synced to root v0.2.0, backend v0.14.0 and frontend v0.21.0, all on uv:
+All six apps are synced to root v0.2.1, backend v0.15.0 and frontend v0.22.0, all on uv:
 
 | App | Root | Backend | Frontend | Notes |
 |-----|------|---------|----------|-------|
-| ElectronicsInventory | v0.2.0 | v0.14.0 | v0.21.0 | Jenkinsfile keeps an extra docs-image stage; `frontend/eslint.config.js` carries the app's role-gating lint rules after the template's blocks (standing edit: the template has no hook for app lint rules) |
-| IoTSupport | v0.2.0 | v0.14.0 | v0.21.0 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
-| DHCPApp | v0.2.0 | v0.14.0 | v0.21.0 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
-| ZigbeeControl | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
-| FieldnotesApp | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; a uv workspace (`packages/`, `mcp-server/`, `eval/`), so the backend `Dockerfile` keeps its extra `COPY` lines, the runtime `git ca-certificates` install and `--no-editable`; `backend/.gitignore` ignores `.run/` (standing edit) |
-| PilotApp | v0.2.0 | v0.14.0 | v0.21.0 | `use_app_shell=false`; no standing edits to template-owned files |
+| ElectronicsInventory | v0.2.1 | v0.15.0 | v0.22.0 | Jenkinsfile keeps an extra docs-image stage (standing edit); the role-gating lint rules live in app-owned `frontend/eslint.app.config.js` |
+| IoTSupport | v0.2.1 | v0.15.0 | v0.22.0 | Jenkinsfile keeps the Vault-wrapped validation with Keycloak env and an OpenSearch sidecar; `vite.config.ts` carries an esptool mock alias and `optimizeDeps` (app-specific edits to a template-owned file) |
+| DHCPApp | v0.2.1 | v0.15.0 | v0.22.0 | Uses `public/favicon.svg`; `copier update` re-creates the deleted `public/favicon.png` (`_skip_if_exists`), so delete it again after each update |
+| ZigbeeControl | v0.2.1 | v0.15.0 | v0.22.0 | `use_app_shell=false`; `index.html` adds a Material Symbols font link |
+| FieldnotesApp | v0.2.1 | v0.15.0 | v0.22.0 | `use_app_shell=false`; a uv workspace (`packages/`, `mcp-server/`, `eval/`), so the backend `Dockerfile` keeps its extra `COPY` lines, the runtime `git ca-certificates` install and `--no-editable`; `backend/.gitignore` ignores `.run/` (standing edit) |
+| PilotApp | v0.2.1 | v0.15.0 | v0.22.0 | `use_app_shell=false`; no standing edits to template-owned files |
 
 DesignAssistant is no longer part of the sync: the project is archived.
 
