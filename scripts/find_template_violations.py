@@ -242,7 +242,9 @@ def classify_app_owned(rel: str, old: Path, new: Path, app: Path) -> tuple[str, 
     if o is None and n is None:
         return "", ""
     if o is None:
-        return ("new-absent" if a is None else "new-present"), ""
+        if a is None:
+            return "new-absent", ""
+        return ("current" if a == n else "new-present"), ""
     if n is None:
         return "dropped", ""
     if a is None:
