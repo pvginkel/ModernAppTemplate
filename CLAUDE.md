@@ -112,10 +112,13 @@ regens churn the tracked `test-app/` lockfiles and `.copier-answers.yml` in
 ### Syncing a downstream app
 
 ```bash
-# Find violations
-python scripts/find_template_violations.py /work/<App> --template-repo .
-python scripts/find_template_violations.py /work/<App>/backend --template-repo backend
-python scripts/find_template_violations.py /work/<App>/frontend --template-repo frontend
+# Find violations: template-owned files that differ from the render with the
+# app's answers, and the app-owned files the next release changed, sorted by
+# what the sync must do by hand (copier update leaves app-owned files alone).
+# It renders with the pinned copier, so it runs under the backend's uv project.
+cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App> --template-repo .
+cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App>/backend --template-repo backend
+cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App>/frontend --template-repo frontend
 
 # Update app from template (each run needs a clean tree; commit between them).
 # Run copier from the component's own directory: it resolves the relative

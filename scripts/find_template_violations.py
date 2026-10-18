@@ -1,195 +1,168 @@
 #!/usr/bin/env python3
-"""Find modifications to template-owned files in a downstream app.
+"""Find drift between one component of a downstream app and its template.
 
-Reads the Copier configuration to determine which files are template-owned
-(overwritten on `copier update`) vs app-owned (`_skip_if_exists`), evaluates
-feature-flag exclusions against the app's `.copier-answers.yml`, and detects
-drift using two complementary methods:
+Renders the template twice with the app's own answers (its
+`.copier-answers.yml`): at the app's `_commit`, the old render, which is what
+the app's last `copier update` produced; and at the release a `copier update`
+takes, the new render (the template's latest release tag, or `--new-ref`).
+Copier renders from a clone of the template at the ref, so only files the
+template tracks count: a gitignored stray in the checkout
+(`scripts/__pycache__/*.pyc`) never shows.
 
-1. Git diff: modifications since the last `copier update` commit.
-2. Source comparison: direct comparison of non-Jinja template source files
-   against the app's current files (catches pre-existing divergence).
+1. Template-owned files: every file of the old render, the Jinja-rendered ones
+   included, is compared with the app's copy. A difference is an edit to a
+   template-owned file, or a conflict resolution the last update left. Files
+   the render has and the app lacks are listed as missing.
+2. App-owned files (`_skip_if_exists`, the new release's list, which is the
+   one `copier update` reads): the update leaves them alone, so a template
+   change to one reaches the app only by hand, through the changelog's step for
+   it. Each is sorted by its old render, its new render and the app's copy into
+   what the sync has to do.
 
-Usage:
-    python scripts/find_template_violations.py /path/to/downstream/app
-    python scripts/find_template_violations.py /path/to/downstream/app --diff
-    python scripts/find_template_violations.py /path/to/downstream/app --commits --diff
+Run it with the pinned copier (the backend template's uv project), from the
+parent repo, once per component of a monorepo app:
+
+    cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App> --template-repo .
+    cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App>/backend --template-repo backend
+    cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App>/frontend --template-repo frontend
+
+Exits 1 when a template-owned file differs from the render or is missing.
 """
 
 from __future__ import annotations
 
 import argparse
 import difflib
-import re
+import os
 import subprocess
 import sys
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
-
-# ── Copier config parsing ────────────────────────────────────────────
-
-
-def load_copier_config(template_repo: Path) -> dict:
-    return yaml.safe_load((template_repo / "copier.yml").read_text())
+ANSWERS_FILE = ".copier-answers.yml"
 
 
-def load_app_answers(app_dir: Path) -> dict:
-    return yaml.safe_load((app_dir / ".copier-answers.yml").read_text())
+# ── Copier and git ───────────────────────────────────────────────────
 
 
-def get_template_dir(template_repo: Path, config: dict) -> Path:
-    subdir = config.get("_subdirectory", ".")
-    return template_repo / subdir
-
-
-def get_skip_if_exists(config: dict) -> set[str]:
-    return set(config.get("_skip_if_exists", []))
-
-
-def evaluate_excludes(config: dict, answers: dict) -> set[str]:
-    """Evaluate Jinja conditionals in _exclude against the app's feature flags.
-
-    Each entry looks like: {% if not use_database %}app/extensions.py{% endif %}
-    When the condition is true (flag is false), the file IS excluded (not generated).
-    """
-    excluded = set()
-    pattern = re.compile(
-        r"\{%\s*if\s+not\s+(\w+)\s*%\}(.+?)\{%\s*endif\s*%\}"
-    )
-
-    for entry in config.get("_exclude", []):
-        m = pattern.match(entry.strip())
-        if not m:
-            continue
-        flag_name = m.group(1)
-        file_path = m.group(2).strip()
-        flag_value = answers.get(flag_name, False)
-        if not flag_value:
-            # Flag is false → file is excluded (not generated)
-            excluded.add(file_path)
-
-    return excluded
-
-
-# ── Template file inventory ──────────────────────────────────────────
-
-
-def enumerate_template_files(template_dir: Path) -> list[tuple[str, str, bool]]:
-    """Walk the template directory and return (output_path, source_path, is_jinja) tuples.
-
-    Skips the copier answers file template.
-    """
-    files = []
-    for p in sorted(template_dir.rglob("*")):
-        if not p.is_file():
-            continue
-
-        rel = str(p.relative_to(template_dir))
-
-        # Skip the copier answers template itself
-        if "{{" in rel or "{%" in rel:
-            continue
-
-        is_jinja = rel.endswith(".jinja")
-        output_path = rel[: -len(".jinja")] if is_jinja else rel
-
-        files.append((output_path, rel, is_jinja))
-
-    return files
-
-
-def classify_files(
-    template_dir: Path,
-    skip_if_exists: set[str],
-    excluded: set[str],
-) -> tuple[list[tuple[str, str, bool]], list[str], list[str]]:
-    """Classify template files into template-owned, app-owned, and excluded.
-
-    Returns (template_owned, app_owned, excluded_files) where template_owned
-    contains (output_path, source_path, is_jinja) tuples.
-    """
-    all_files = enumerate_template_files(template_dir)
-
-    template_owned = []
-    app_owned = []
-    excluded_files = []
-
-    for output_path, source_path, is_jinja in all_files:
-        if output_path in skip_if_exists:
-            app_owned.append(output_path)
-        elif output_path in excluded or any(
-            output_path.startswith(e + "/") for e in excluded
-        ):
-            excluded_files.append(output_path)
-        else:
-            template_owned.append((output_path, source_path, is_jinja))
-
-    return template_owned, app_owned, excluded_files
-
-
-# ── Git operations ───────────────────────────────────────────────────
-
-
-def find_copier_commit(app_dir: Path) -> str | None:
-    """Find the most recent commit that changed .copier-answers.yml."""
+def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", "log", "--format=%H", "-1", "--", ".copier-answers.yml"],
-        cwd=app_dir,
-        capture_output=True,
-        text=True,
-    )
-    commit = result.stdout.strip()
-    return commit if commit else None
-
-
-def file_modified_since(app_dir: Path, commit: str, file_path: str) -> bool:
-    """Check if a file was modified between commit and HEAD."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", commit, "HEAD", "--", file_path],
-        cwd=app_dir,
-        capture_output=True,
-        text=True,
-    )
-    return bool(result.stdout.strip())
-
-
-def get_diff(app_dir: Path, commit: str, file_path: str) -> str:
-    """Get the actual diff for a file between commit and HEAD."""
-    result = subprocess.run(
-        ["git", "diff", commit, "HEAD", "--", file_path],
-        cwd=app_dir,
-        capture_output=True,
-        text=True,
+        ["git", *args], cwd=repo, capture_output=True, text=True, check=True
     )
     return result.stdout
 
 
-def get_commit_log_for_file(
-    app_dir: Path, since_commit: str, file_path: str
-) -> list[str]:
-    """Get commit messages that touched a file since a given commit."""
-    result = subprocess.run(
-        [
-            "git",
-            "log",
-            "--oneline",
-            f"{since_commit}..HEAD",
-            "--",
-            file_path,
-        ],
-        cwd=app_dir,
-        capture_output=True,
-        text=True,
+def latest_release_tag(template_repo: Path) -> str:
+    """The tag `copier update` takes by default: the highest PEP 440 release."""
+    from packaging.version import InvalidVersion, Version
+
+    best: tuple[Version, str] | None = None
+    for tag in _git(template_repo, "tag", "--list").split():
+        try:
+            version = Version(tag)
+        except InvalidVersion:
+            continue
+        if version.is_prerelease:
+            continue
+        if best is None or version > best[0]:
+            best = (version, tag)
+    if best is None:
+        sys.exit(f"Error: {template_repo} has no release tag; pass --new-ref")
+    return best[1]
+
+
+def skip_if_exists_matcher(template_repo: Path, ref: str, data: dict):
+    """Match paths against the ref's `_skip_if_exists`, as copier does."""
+    import jinja2
+    from packaging.version import Version
+    from pathspec import PathSpec
+    from pathspec import __version__ as pathspec_version
+
+    config = yaml.safe_load(_git(template_repo, "show", f"{ref}:copier.yml"))
+    env = jinja2.Environment()
+    patterns = [
+        env.from_string(p).render(**data) for p in config.get("_skip_if_exists", [])
+    ]
+    style = (
+        "gitignore" if Version(pathspec_version) >= Version("1.0.0") else "gitwildmatch"
     )
-    return [line for line in result.stdout.strip().splitlines() if line]
+    spec = PathSpec.from_lines(style, patterns)
+    return spec.match_file
+
+
+def render(template_repo: Path, ref: str, data: dict, dst: Path) -> None:
+    try:
+        from copier import run_copy
+    except ImportError:
+        sys.exit(
+            "Error: copier is not importable. Run this script with the pinned copier:\n"
+            "  cexec modern-app uv run --project backend --locked python "
+            "scripts/find_template_violations.py ..."
+        )
+    run_copy(
+        str(template_repo),
+        dst,
+        data=data,
+        vcs_ref=ref,
+        defaults=True,
+        overwrite=True,
+        unsafe=True,
+        skip_tasks=True,
+        quiet=True,
+    )
+
+
+def rendered_files(root: Path) -> set[str]:
+    files = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in filenames:
+            rel = os.path.relpath(os.path.join(dirpath, name), root)
+            if rel != ANSWERS_FILE:
+                files.add(rel)
+    return files
+
+
+def find_copier_commit(app_dir: Path) -> str | None:
+    """The most recent commit that changed .copier-answers.yml."""
+    out = _git(app_dir, "log", "--format=%H", "-1", "--", ANSWERS_FILE).strip()
+    return out or None
+
+
+def changed_since(app_dir: Path, commit: str, rel: str) -> bool:
+    return bool(_git(app_dir, "diff", "--name-only", commit, "--", rel).strip())
+
+
+def commits_since(app_dir: Path, commit: str, rel: str) -> list[str]:
+    out = _git(app_dir, "log", "--oneline", f"{commit}..HEAD", "--", rel)
+    return [line for line in out.splitlines() if line]
+
+
+# ── Comparison ───────────────────────────────────────────────────────
+
+
+def read(path: Path) -> bytes | None:
+    if path.is_symlink():
+        return b"symlink -> " + os.readlink(path).encode()
+    if not path.is_file():
+        return None
+    return path.read_bytes()
+
+
+def unified(a: bytes | None, b: bytes | None, a_name: str, b_name: str) -> str:
+    try:
+        a_lines = (a or b"").decode().splitlines(keepends=True)
+        b_lines = (b or b"").decode().splitlines(keepends=True)
+    except UnicodeDecodeError:
+        return f"Binary files {a_name} and {b_name} differ\n"
+    return "".join(difflib.unified_diff(a_lines, b_lines, a_name, b_name))
 
 
 def count_diff_lines(diff_text: str) -> tuple[int, int]:
-    """Count added and removed lines in a unified diff."""
-    added = 0
-    removed = 0
+    added = removed = 0
     for line in diff_text.splitlines():
         if line.startswith("+") and not line.startswith("+++"):
             added += 1
@@ -198,70 +171,119 @@ def count_diff_lines(diff_text: str) -> tuple[int, int]:
     return added, removed
 
 
-# ── Source comparison ────────────────────────────────────────────────
+@dataclass
+class Report:
+    # Template-owned files that differ: (file, diff from the render to the app)
+    differs: list[tuple[str, str]] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
+    template_equal: int = 0
+    # App-owned buckets: file → diff to show (old→new template change, or "")
+    buckets: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
 
 
-def compare_to_source(
-    app_dir: Path,
-    template_dir: Path,
-    template_owned: list[tuple[str, str, bool]],
-) -> tuple[list[dict], list[dict]]:
-    """Compare non-Jinja template source files directly to app files.
+# Bucket order and their explanations. O = old render, N = new render, A = app.
+BUCKETS = [
+    (
+        "take",
+        "TAKE BY HAND",
+        "The template changed it, and the app still has the old render: copier "
+        "update keeps the old text. Take the template's change by hand (the "
+        "changelog's step, or the new render).",
+    ),
+    (
+        "merge",
+        "MERGE BY HAND",
+        "The template changed it, and the app has its own edits: copier update "
+        "keeps the app's. Merge the template's change by hand (the changelog's step).",
+    ),
+    (
+        "current",
+        "ALREADY CURRENT",
+        "The template changed it, and the app's copy already equals the new render.",
+    ),
+    (
+        "new-absent",
+        "NEW, APP HAS NONE",
+        "The new release adds it: copier update creates it.",
+    ),
+    (
+        "new-present",
+        "NEW, APP HAS ITS OWN",
+        "The new release adds it, and the app already has the file: copier "
+        "update keeps the app's. Compare the two by hand.",
+    ),
+    (
+        "dropped",
+        "DROPPED BY THE TEMPLATE",
+        "The new release no longer renders it: the app keeps its copy. Delete it "
+        "by hand if the changelog says so.",
+    ),
+    (
+        "deleted",
+        "DELETED BY THE APP",
+        "The render has it and the app doesn't: copier update re-creates it.",
+    ),
+    (
+        "own",
+        "THE APP'S OWN",
+        "The template didn't change it; the app's copy differs from the render.",
+    ),
+    (
+        "pristine",
+        "EQUAL TO THE RENDER",
+        "The template didn't change it; the app's copy equals the render.",
+    ),
+]
+QUIET_BUCKETS = {"own", "pristine"}
 
-    Returns (diverged, jinja_files) where:
-    - diverged: list of dicts with file info for non-Jinja files that differ
-    - jinja_files: list of dicts for Jinja files (can't compare directly)
-    """
-    diverged = []
-    jinja_files = []
 
-    for output_path, source_path, is_jinja in template_owned:
-        app_file = app_dir / output_path
-        template_file = template_dir / source_path
+def classify_app_owned(rel: str, old: Path, new: Path, app: Path) -> tuple[str, str]:
+    o, n, a = read(old / rel), read(new / rel), read(app / rel)
+    if o is None and n is None:
+        return "", ""
+    if o is None:
+        return ("new-absent" if a is None else "new-present"), ""
+    if n is None:
+        return "dropped", ""
+    if a is None:
+        return "deleted", ""
+    if o == n:
+        return ("pristine" if a == n else "own"), ""
+    change = unified(o, n, f"old/{rel}", f"new/{rel}")
+    if a == n:
+        return "current", change
+    if a == o:
+        return "take", change
+    return "merge", change
 
-        if not app_file.exists():
+
+def build_report(
+    app_dir: Path, current: Path, old: Path, new: Path, is_app_owned
+) -> Report:
+    """Template-owned files against the current render (the app's _commit);
+    app-owned ones sorted by the old render, the new render and the app."""
+    report = Report(buckets={key: [] for key, _, _ in BUCKETS})
+    for rel in sorted(rendered_files(old) | rendered_files(new)):
+        if is_app_owned(rel):
+            bucket, change = classify_app_owned(rel, old, new, app_dir)
+            if bucket:
+                report.buckets[bucket].append((rel, change))
+    for rel in sorted(rendered_files(current)):
+        if is_app_owned(rel):
             continue
-
-        if is_jinja:
-            jinja_files.append({"file": output_path, "source": source_path})
-            continue
-
-        # Direct byte comparison for non-Jinja files
-        app_content = app_file.read_bytes()
-        template_content = template_file.read_bytes()
-
-        if app_content != template_content:
-            # Generate a unified diff for display
-            app_lines = app_file.read_text(errors="replace").splitlines(
-                keepends=True
+        expected, actual = read(current / rel), read(app_dir / rel)
+        if actual is None:
+            report.missing.append(rel)
+        elif actual != expected:
+            report.differs.append(
+                (rel, unified(expected, actual, f"render/{rel}", rel))
             )
-            template_lines = template_file.read_text(
-                errors="replace"
-            ).splitlines(keepends=True)
-            diff = list(
-                difflib.unified_diff(
-                    template_lines,
-                    app_lines,
-                    fromfile=f"template/{source_path}",
-                    tofile=output_path,
-                )
-            )
-            diff_text = "".join(diff)
-            added, removed = count_diff_lines(diff_text)
-            diverged.append(
-                {
-                    "file": output_path,
-                    "source": source_path,
-                    "added": added,
-                    "removed": removed,
-                    "diff": diff_text,
-                }
-            )
-
-    return diverged, jinja_files
+        else:
+            report.template_equal += 1
+    return report
 
 
-# ── Rendering helpers ────────────────────────────────────────────────
+# ── Output ───────────────────────────────────────────────────────────
 
 
 class Colors:
@@ -275,12 +297,8 @@ class Colors:
     RESET = "\033[0m"
 
 
-def supports_color() -> bool:
-    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-
 def c(color: str, text: str) -> str:
-    if supports_color():
+    if sys.stdout.isatty():
         return f"{color}{text}{Colors.RESET}"
     return text
 
@@ -298,306 +316,205 @@ def print_diff(diff_text: str) -> None:
     print()
 
 
-# ── Main ─────────────────────────────────────────────────────────────
+def heading(color: str, text: str, note: str | None = None) -> None:
+    print(c(Colors.BOLD + color, text))
+    if note:
+        print(c(Colors.DIM, f"({note})"))
+    print(c(Colors.DIM, "-" * 60))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Find modifications to template-owned files in a downstream app.",
+        description="Find drift between a downstream app component and its template.",
     )
     parser.add_argument(
-        "app_dir",
-        type=Path,
-        help="Path to the downstream app directory",
+        "app_dir", type=Path, help="The app component (holds .copier-answers.yml)"
     )
     parser.add_argument(
         "--template-repo",
         type=Path,
         default=None,
-        help="Path to the template repo (default: resolved from .copier-answers.yml _src_path)",
+        help="The template repo (default: the answers' _src_path, from the app directory)",
     )
     parser.add_argument(
-        "--diff",
-        action="store_true",
-        help="Show full diffs for modified files",
+        "--old-ref",
+        default=None,
+        help="Template ref the app-owned files are sorted from (default: the "
+        "app's _commit; after an update, the release the app came from)",
     )
+    parser.add_argument(
+        "--new-ref",
+        default=None,
+        help="Template ref the app-owned files are sorted to (default: the latest "
+        "release tag, which copier update takes; HEAD for an unreleased change)",
+    )
+    parser.add_argument("--diff", action="store_true", help="Show the diffs")
     parser.add_argument(
         "--commits",
         action="store_true",
-        help="Show commit log for each modified file",
+        help="Show the commits since the last copier update that touched each differing file",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Also list the app-owned files the template didn't change",
     )
     args = parser.parse_args()
 
     app_dir: Path = args.app_dir.resolve()
-    if not (app_dir / ".copier-answers.yml").exists():
-        print(f"Error: {app_dir} does not contain .copier-answers.yml")
-        sys.exit(1)
+    if not (app_dir / ANSWERS_FILE).exists():
+        sys.exit(f"Error: {app_dir} does not contain {ANSWERS_FILE}")
+    answers = yaml.safe_load((app_dir / ANSWERS_FILE).read_text())
+    data = {k: v for k, v in answers.items() if not k.startswith("_")}
 
-    # Load app answers
-    answers = load_app_answers(app_dir)
-
-    # Resolve template repo
     if args.template_repo:
         template_repo = args.template_repo.resolve()
+    elif answers.get("_src_path"):
+        template_repo = (app_dir / answers["_src_path"]).resolve()
     else:
-        src_path = answers.get("_src_path", "")
-        if src_path:
-            template_repo = (app_dir / src_path).resolve()
-        else:
-            print(
-                "Error: cannot determine template repo path. Use --template-repo."
-            )
-            sys.exit(1)
-
+        sys.exit("Error: cannot determine the template repo. Use --template-repo.")
     if not (template_repo / "copier.yml").exists():
-        print(f"Error: {template_repo} does not contain copier.yml")
-        sys.exit(1)
+        sys.exit(f"Error: {template_repo} does not contain copier.yml")
 
-    # Load copier config
-    config = load_copier_config(template_repo)
-    template_dir = get_template_dir(template_repo, config)
-    skip_if_exists = get_skip_if_exists(config)
-    excluded = evaluate_excludes(config, answers)
+    current_ref = answers.get("_commit")
+    if not current_ref:
+        sys.exit(f"Error: {ANSWERS_FILE} has no _commit")
+    old_ref = args.old_ref or current_ref
+    new_ref = args.new_ref or latest_release_tag(template_repo)
 
-    # Classify files
-    template_owned, app_owned, excluded_files = classify_files(
-        template_dir, skip_if_exists, excluded
-    )
+    def commit_of(ref: str) -> str:
+        return _git(template_repo, "rev-parse", f"{ref}^{{commit}}").strip()
 
-    # Find the copier adoption commit
-    copier_commit = find_copier_commit(app_dir)
-    if not copier_commit:
-        print("Error: no commits found that modified .copier-answers.yml")
-        sys.exit(1)
+    same_ref = commit_of(old_ref) == commit_of(new_ref)
 
-    # Get short hash for display
-    result = subprocess.run(
-        ["git", "log", "--format=%h %s", "-1", copier_commit],
-        cwd=app_dir,
-        capture_output=True,
-        text=True,
-    )
-    copier_commit_desc = result.stdout.strip()
+    with tempfile.TemporaryDirectory(prefix="template-render.") as tmp:
+        renders: dict[str, Path] = {}
+
+        def rendered(ref: str) -> Path:
+            commit = commit_of(ref)
+            if commit not in renders:
+                renders[commit] = Path(tmp, str(len(renders)))
+                render(template_repo, ref, data, renders[commit])
+            return renders[commit]
+
+        current, old, new = rendered(current_ref), rendered(old_ref), rendered(new_ref)
+        is_app_owned = skip_if_exists_matcher(template_repo, new_ref, data)
+        report = build_report(app_dir, current, old, new, is_app_owned)
+
+    baseline = find_copier_commit(app_dir)
 
     # ── Header ────────────────────────────────────────────────────
-
     print()
-    print(c(Colors.BOLD, f"Template Violation Report: {app_dir.name}"))
+    print(c(Colors.BOLD, f"Template drift report: {app_dir}"))
     print(c(Colors.DIM, "=" * 60))
-    print()
-
-    # Feature flags
+    print(f"Template:   {template_repo}")
+    print(f"Render:     {current_ref} (the app's _commit)")
+    new_note = (
+        "the latest release, which copier update takes"
+        if not args.new_ref
+        else "--new-ref"
+    )
+    print(f"Update to:  {new_ref} ({new_note})")
     flags = {
-        k: v
-        for k, v in answers.items()
-        if k.startswith("use_") and isinstance(v, bool)
+        k: v for k, v in data.items() if k.startswith("use_") and isinstance(v, bool)
     }
-    print(c(Colors.BOLD, "Feature flags:"))
-    for flag, value in sorted(flags.items()):
-        color = Colors.GREEN if value else Colors.DIM
-        print(f"  {flag}: {c(color, str(value))}")
+    if flags:
+        print("Flags:      " + ", ".join(f"{k}={v}" for k, v in sorted(flags.items())))
+    if baseline:
+        desc = _git(app_dir, "log", "--format=%h %s", "-1", baseline).strip()
+        print(f"Last copier update: {desc}")
     print()
 
-    print(c(Colors.BOLD, "File inventory:"))
-    print(f"  Template-owned: {len(template_owned)} files")
-    print(f"  App-owned (_skip_if_exists): {len(app_owned)} files")
-    print(f"  Excluded by feature flags: {len(excluded_files)} files")
-    print()
-
-    print(c(Colors.BOLD, "Baseline commit (last copier update):"))
-    print(f"  {copier_commit_desc}")
-    print()
-
-    had_findings = False
-
-    # ── Section 1: Git diff (post-adoption changes) ──────────────
-
-    git_violations = []
-    missing = []
-
-    for output_path, _source_path, _is_jinja in template_owned:
-        full_path = app_dir / output_path
-        if not full_path.exists():
-            missing.append(output_path)
-            continue
-
-        if file_modified_since(app_dir, copier_commit, output_path):
-            diff_text = get_diff(app_dir, copier_commit, output_path)
-            added, removed = count_diff_lines(diff_text)
-            commits = get_commit_log_for_file(
-                app_dir, copier_commit, output_path
-            )
-            git_violations.append(
-                {
-                    "file": output_path,
-                    "added": added,
-                    "removed": removed,
-                    "diff": diff_text,
-                    "commits": commits,
-                }
-            )
-
-    if git_violations:
-        had_findings = True
-        header = f"POST-ADOPTION CHANGES: {len(git_violations)} template-owned files modified since copier update"
-        print(c(Colors.BOLD + Colors.RED, header))
-        print(c(Colors.DIM, "-" * 60))
-        print()
-
-        for v in git_violations:
-            size_desc = f"+{v['added']}/-{v['removed']}"
+    # ── Template-owned ────────────────────────────────────────────
+    if report.differs:
+        heading(
+            Colors.RED,
+            f"TEMPLATE-OWNED FILES THAT DIFFER FROM THE RENDER: {len(report.differs)}",
+            f"against the {current_ref} render, so edits to template-owned files; "
+            "* = changed since the last copier update",
+        )
+        for rel, diff in report.differs:
+            added, removed = count_diff_lines(diff)
+            mark = " *" if baseline and changed_since(app_dir, baseline, rel) else ""
             print(
-                f"  {c(Colors.YELLOW, v['file'])}  {c(Colors.DIM, size_desc)}"
+                f"  {c(Colors.YELLOW, rel)}  {c(Colors.DIM, f'+{added}/-{removed}')}{mark}"
             )
-
-            if args.commits and v["commits"]:
-                for commit_line in v["commits"]:
-                    print(f"    {c(Colors.CYAN, commit_line)}")
-
-            if (args.commits or args.diff) and (v["commits"] or v["diff"]):
-                print()
-
-            if args.diff and v["diff"]:
-                print_diff(v["diff"])
-
-        if not args.commits and not args.diff:
-            print()
+            if args.commits and baseline:
+                for line in commits_since(app_dir, baseline, rel):
+                    print(f"    {c(Colors.CYAN, line)}")
+            if args.diff:
+                print_diff(diff)
+        print()
     else:
-        print(
-            c(
-                Colors.GREEN,
-                "No post-adoption changes. All template-owned files unchanged since copier update.",
-            )
-        )
+        print(c(Colors.GREEN, "Every template-owned file equals the render."))
         print()
 
-    # ── Section 2: Source comparison (all divergence) ─────────────
+    if report.missing:
+        heading(
+            Colors.YELLOW,
+            f"MISSING: {len(report.missing)} template-owned files the render has and the app lacks",
+            "the app deleted them, or never took them",
+        )
+        for rel in report.missing:
+            print(f"  {rel}")
+        print()
 
-    diverged, jinja_files = compare_to_source(
-        app_dir, template_dir, template_owned
+    # ── App-owned ─────────────────────────────────────────────────
+    span = old_ref if same_ref else f"{old_ref} -> {new_ref}"
+    print(c(Colors.BOLD, f"APP-OWNED FILES (_skip_if_exists), {span}"))
+    print(
+        c(
+            Colors.DIM,
+            "(copier update leaves these alone; a template change reaches the app by hand)",
+        )
     )
-
-    # Filter out files already reported in git violations (to avoid double-reporting)
-    git_violation_files = {v["file"] for v in git_violations}
-    pre_existing = [d for d in diverged if d["file"] not in git_violation_files]
-
-    if pre_existing:
-        had_findings = True
-        header = f"PRE-EXISTING DIVERGENCE: {len(pre_existing)} non-Jinja template files differ from source"
-        print(c(Colors.BOLD + Colors.YELLOW, header))
-        print(
-            c(
-                Colors.DIM,
-                "(These differences existed at adoption time or were introduced outside git.)",
-            )
-        )
-        print(c(Colors.DIM, "-" * 60))
+    print(c(Colors.DIM, "=" * 60))
+    shown = [
+        (key, title, note)
+        for key, title, note in BUCKETS
+        if report.buckets[key] and (key not in QUIET_BUCKETS or args.all)
+    ]
+    if not shown:
+        print(c(Colors.GREEN, "Nothing to take by hand."))
+        print()
+    for key, title, note in shown:
+        entries = report.buckets[key]
+        heading(Colors.BLUE, f"{title}: {len(entries)}", note)
+        for rel, change in entries:
+            print(f"  {rel}")
+            if args.diff and change:
+                print_diff(change)
         print()
 
-        for d in pre_existing:
-            size_desc = f"+{d['added']}/-{d['removed']}"
-            print(
-                f"  {c(Colors.YELLOW, d['file'])}  {c(Colors.DIM, size_desc)}"
-            )
-
-            if args.diff and d["diff"]:
-                print()
-                print_diff(d["diff"])
-
-        if not args.diff:
-            print()
-
-    # Always show Jinja files that can't be compared
-    if jinja_files:
-        jinja_non_git = [
-            j for j in jinja_files if j["file"] not in git_violation_files
-        ]
-        if jinja_non_git:
-            print(
-                c(
-                    Colors.BOLD + Colors.BLUE,
-                    f"JINJA FILES: {len(jinja_non_git)} template files use Jinja (cannot compare directly)",
-                )
-            )
-            print(
-                c(
-                    Colors.DIM,
-                    "(These files are rendered by Copier with variable substitution. "
-                    "Run `copier update --pretend` to check for drift.)",
-                )
-            )
-            print(c(Colors.DIM, "-" * 60))
-            for j in jinja_non_git:
-                source = j["source"]
-                print(f"  {c(Colors.DIM, j['file'])}  {c(Colors.DIM, f'← {source}')}")
-            print()
-
-    # Report diverged files also found in git violations
-    also_diverged = [d for d in diverged if d["file"] in git_violation_files]
-    if also_diverged:
-        print(
-            c(
-                Colors.DIM,
-                f"  ({len(also_diverged)} file(s) diverge from source AND were modified post-adoption — reported above.)",
-            )
-        )
-        print()
-
-    # ── Section 3: Missing files ─────────────────────────────────
-
-    if missing:
-        print(
-            c(
-                Colors.BOLD + Colors.YELLOW,
-                f"MISSING: {len(missing)} template-owned files not found in app",
-            )
-        )
-        print(c(Colors.DIM, "-" * 60))
-        for f in missing:
-            print(f"  {c(Colors.DIM, f)}")
-        print()
-        print(
-            c(
-                Colors.DIM,
-                "  (May be expected if deleted intentionally or app predates these additions.)",
-            )
-        )
-        print()
-
-    # ── Summary ──────────────────────────────────────────────────
-
-    total_files = len(template_owned)
-    violation_files = git_violation_files | {d["file"] for d in pre_existing}
-    missing_set = set(missing)
-    clean_count = total_files - len(violation_files) - len(missing_set)
-    # Don't double-count files that are both missing and would show as diverged
-    jinja_only_count = len(
-        [j for j in jinja_files if j["file"] not in violation_files and j["file"] not in missing_set]
-    )
-
+    # ── Summary ───────────────────────────────────────────────────
     print(c(Colors.BOLD, "Summary:"))
     print(
-        f"  {c(Colors.GREEN, str(clean_count - jinja_only_count))} template-owned files match source exactly"
+        f"  {c(Colors.GREEN, str(report.template_equal))} template-owned files equal the render"
     )
-    if jinja_only_count:
+    if report.differs:
         print(
-            f"  {c(Colors.BLUE, str(jinja_only_count))} Jinja-rendered files (need `copier update --pretend` to verify)"
+            f"  {c(Colors.RED, str(len(report.differs)))} template-owned files differ from it"
         )
-    if git_violations:
+    if report.missing:
         print(
-            f"  {c(Colors.RED, str(len(git_violations)))} files modified since last copier update"
+            f"  {c(Colors.YELLOW, str(len(report.missing)))} template-owned files missing"
         )
-    if pre_existing:
+    counts = ", ".join(
+        f"{len(report.buckets[key])} {title.lower()}"
+        for key, title, _ in BUCKETS
+        if report.buckets[key]
+    )
+    print(f"  app-owned: {counts or 'none'}")
+    if not args.all and any(report.buckets[k] for k in QUIET_BUCKETS):
         print(
-            f"  {c(Colors.YELLOW, str(len(pre_existing)))} files with pre-existing divergence from template source"
-        )
-    if missing:
-        print(
-            f"  {c(Colors.YELLOW, str(len(missing)))} template-owned files missing"
+            c(
+                Colors.DIM,
+                "  (--all lists the app-owned files the template didn't change)",
+            )
         )
     print()
 
-    if had_findings:
+    if report.differs or report.missing:
         sys.exit(1)
 
 

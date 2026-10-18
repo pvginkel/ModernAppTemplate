@@ -20,26 +20,34 @@ Every modification to a template-owned file falls into one of three buckets:
 
 ### Phase 1: Discover
 
-Run the violation finder script from the template repo, once per component. Downstream apps are monorepos, so run it against the root layer (using the parent repo as the template) as well as the backend and frontend layers:
+Run the violation finder from the parent repo, once per component. Downstream apps are monorepos, so run it against the root layer (the parent repo is its template) as well as the backend and frontend layers. It renders with the pinned copier, so it runs under the backend template's uv project:
 
 ```bash
 cd /work/ModernAppTemplate
-python3 scripts/find_template_violations.py /path/to/downstream/app --template-repo .
-python3 scripts/find_template_violations.py /path/to/downstream/app/backend --template-repo backend
-python3 scripts/find_template_violations.py /path/to/downstream/app/frontend --template-repo frontend
+FINDER="cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py"
+$FINDER /work/<App> --template-repo .
+$FINDER /work/<App>/backend --template-repo backend
+$FINDER /work/<App>/frontend --template-repo frontend
 ```
 
-The script reads `copier.yml` and the app's `.copier-answers.yml` to automatically determine which files are template-owned, app-owned, and feature-flag-excluded. It detects drift using two methods:
+The script renders the template with the app's own answers (`.copier-answers.yml`), so the feature flags and the Jinja-rendered files are the app's. Copier renders from a clone of the template at the ref, so only files the template tracks count. It reports two things:
 
-- **Git diff** — modifications since the last `copier update` commit
-- **Source comparison** — direct comparison of non-Jinja template files against the app's copies (catches pre-existing divergence)
+- **Template-owned files** — every file of the render at the app's `_commit`, the Jinja-rendered ones included, compared with the app's copy. A difference is an edit to a template-owned file; `*` marks the ones changed since the last `copier update`. Files the render has and the app lacks are listed as missing. Either makes the script exit 1.
+- **App-owned files** (`_skip_if_exists`) — sorted by their render at the app's `_commit`, their render at the release `copier update` takes (the latest release tag) and the app's copy. `copier update` leaves them alone (step 3 below), so this list is the sync's by-hand work:
+  - *take by hand* — the template changed the file and the app still has the old render;
+  - *merge by hand* — the template changed it and the app has its own edits;
+  - *already current* — the app's copy equals the new render;
+  - *new* (the update creates it where the app has none, and keeps an app's own copy), *dropped by the template*, *deleted by the app* (the update re-creates it).
+
+  The files the template didn't change are counted, and listed with `--all`.
 
 Useful flags:
-- `--commits` — show which commits touched each violated file
-- `--diff` — show the actual diffs
-- `--commits --diff` — both
+- `--diff` — the diffs: render to app for template-owned files, the template's change (old render to new) for app-owned ones
+- `--commits` — the commits since the last `copier update` that touched each differing file
+- `--new-ref HEAD` — sort the app-owned files against an unreleased template change
+- `--old-ref <tag>` — sort them from an earlier release, such as the one the app came from after its update
 
-For each finding, classify the change into one of the three buckets.
+For each template-owned finding, classify the change into one of the three buckets.
 
 ### Phase 2: Upstream good changes to the template
 
@@ -89,7 +97,7 @@ If a change can't be upstreamed (it's app-specific) and can't be refactored out 
 
 With the template updated (Phases 2-3 complete):
 
-1. **Read `changelog.md`** to understand all template changes and their migration steps. This is the primary guide for what needs to happen during the update.
+1. **Read `changelog.md`** to understand all template changes and their migration steps. This is the primary guide for what needs to happen during the update. Run the violation finder (Phase 1) before the updates too, and keep its app-owned *take by hand* and *merge by hand* lists for step 4.
 2. Run `copier update` per component — root, backend, frontend — each against a clean working tree, committing between them since copier needs the whole monorepo's tree clean:
    ```bash
    # copier lives in the backend template's uv project, in the modern-app tool
@@ -101,13 +109,13 @@ With the template updated (Phases 2-3 complete):
    cd /work/<App>/frontend && $COPIER && git add -A . && git commit -m "Update to frontend template vX.Y.Z"
    ```
 3. Resolve any merge conflicts. They are in template-owned files only, which should now accept the template's version cleanly, since the good changes were upstreamed. `copier update` leaves app-owned (`_skip_if_exists`) files alone, whether the app edited them or not, in all three components: every release after backend v0.14.0 and frontend v0.21.0 lists each entry twice, once with the `backend/` or `frontend/` prefix, and the update reads the new release's list ([How `copier update` treats app-owned files](copier_approach.md#how-copier-update-treats-app-owned-files)). Updates to those two releases and earlier merged the template's changes into the app-owned files an app had edited. A conflict or `.rej` file in an app-owned file now means its entry lacks a twin: keep the app's version, delete the `.rej` file, and add the twin to the template.
-4. Follow the migration steps from `changelog.md` for each entry since the app's current `_commit`.
+4. Follow the migration steps from `changelog.md` for each entry since the app's current `_commit`. They are the only way a template change to an app-owned file reaches the app, since `copier update` leaves those files alone. Every file on the finder's *take by hand* and *merge by hand* lists should have a step. A file without one is a gap in the changelog: take the template's change from the finder's `--diff`, and report the gap.
 5. Move any remaining app-specific code out of template-owned files:
    - Business logic → app services or `startup.py` hooks
    - Extra endpoints → app-owned blueprints registered via `register_blueprints()`
    - Test utilities → `tests/conftest.py` or app-specific test helpers
 6. Run the app's full test suite.
-7. Re-run the violation finder to confirm a clean report.
+7. Re-run the violation finder to confirm a clean report: no template-owned file differs from the render but the app's recorded standing edits. Pass `--old-ref <the _commit before the update>` to check the app-owned files: each one the release changed is *already current*, or on *merge by hand* with the step applied to the app's own edits.
 8. **Commit the downstream app.** Backend and frontend live in one repo per app (`/work/<App>`):
    ```bash
    cd /work/<App> && git add -p && git commit -m "Update to backend template vX.Y.Z / frontend template vX.Y.Z"
@@ -125,7 +133,8 @@ by `copier update`) or **app-owned** (`_skip_if_exists`, never overwritten).
 
 ### NEVER modify these files directly
 Template-owned files are determined by `copier.yml` in the template repo. Run
-the violation finder to check: `python3 scripts/find_template_violations.py .`
+the violation finder from the template's parent repo to check (once per
+component): `cexec modern-app uv run --project backend --locked python scripts/find_template_violations.py /work/<App>/backend --template-repo backend`
 
 ### Where to put app-specific code instead
 | Need | Put it in | Hook/mechanism |
@@ -172,7 +181,7 @@ Good migration steps are specific and actionable:
 
 Before (or during) a `copier update`, **read all changelog entries** between the app's current `_commit` (in `.copier-answers.yml`) and the template's HEAD. The migration steps tell you exactly what manual work is needed beyond what copier handles automatically.
 
-This is especially important because `copier update` only overwrites template-owned files — it cannot modify `pyproject.toml`, `container.py`, `startup.py`, or other app-owned files that may need corresponding changes.
+This is especially important because `copier update` only overwrites template-owned files — it cannot modify `pyproject.toml`, `container.py`, `startup.py`, or other app-owned files that may need corresponding changes. So when a template change edits an app-owned file, its entry needs a migration step that names the file and the edit: nothing else brings the change to an existing app. The violation finder's *take by hand* and *merge by hand* lists show which app-owned files a release changed, so a sync can check that every one has its step.
 
 ---
 
@@ -203,7 +212,7 @@ Add the template ownership section shown in Phase 5 above. This gives Claude (an
 
 ### Process check after feature work
 After completing a feature in a downstream app, before merging:
-1. Run `python3 scripts/find_template_violations.py .` from the template repo
+1. Run the violation finder from the parent repo against each component (Phase 1)
 2. If any violations → classify into the three buckets and act accordingly
 3. This can be a PR review checklist item
 
