@@ -100,7 +100,7 @@ With the template updated (Phases 2-3 complete):
    cd /work/<App>/backend  && $COPIER && git add -A . && git commit -m "Update to backend template vX.Y.Z"
    cd /work/<App>/frontend && $COPIER && git add -A . && git commit -m "Update to frontend template vX.Y.Z"
    ```
-3. Resolve any merge conflicts. Template-owned files should now accept the template's version cleanly, since the good changes were upstreamed. For `_skip_if_exists` files, copier may still produce merge conflicts or `*.rej` files when a template later adds a file the app already has — keep the app's version and delete the `.rej` files.
+3. Resolve any merge conflicts. They are in template-owned files only, which should now accept the template's version cleanly, since the good changes were upstreamed. `copier update` leaves app-owned (`_skip_if_exists`) files alone, whether the app edited them or not, in all three components: every release after backend v0.14.0 and frontend v0.21.0 lists each entry twice, once with the `backend/` or `frontend/` prefix, and the update reads the new release's list ([How `copier update` treats app-owned files](copier_approach.md#how-copier-update-treats-app-owned-files)). Updates to those two releases and earlier merged the template's changes into the app-owned files an app had edited. A conflict or `.rej` file in an app-owned file now means its entry lacks a twin: keep the app's version, delete the `.rej` file, and add the twin to the template.
 4. Follow the migration steps from `changelog.md` for each entry since the app's current `_commit`.
 5. Move any remaining app-specific code out of template-owned files:
    - Business logic → app services or `startup.py` hooks

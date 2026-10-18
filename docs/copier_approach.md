@@ -162,7 +162,6 @@ All infrastructure code. Developers should not edit these:
 - `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
 - `run.py` — server entry point
 - `scripts/` — `testing-server.sh`, `dev-watch.sh`, `check.py`, `init-dev-database.py`, `wait-for-services.py`
-- `Dockerfile` — container build (generated once, `_skip_if_exists`; CI now lives in the root template)
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
 
 ### App-maintained (`_skip_if_exists` — generated once, never overwritten)
@@ -177,6 +176,11 @@ All infrastructure code. Developers should not edit these:
 - `tests/conftest.py` — imports infrastructure fixtures, adds app fixtures
 - `tests/test_smoke.py` — one liveness test, so a fresh app's `pytest` has something to collect
 - `.env.example` — environment variable documentation
+- `Dockerfile`, `.dockerignore` — container build (CI lives in the root template)
+- `README.md`
+- `vulture_whitelist.py` — the app's vulture whitelist
+
+`copier update` leaves these alone, whether the app edited them or not; see [How `copier update` treats app-owned files](#how-copier-update-treats-app-owned-files).
 
 ### Template-maintained test infrastructure
 
@@ -208,17 +212,40 @@ Note: `workspace_name`, `repo_url` and `image_name` were removed — CI and imag
 
 ```yaml
 _skip_if_exists:
-  - app/startup.py
-  - app/services/container.py
-  - app/exceptions.py
-  - app/consts.py
-  - app/app_config.py
-  - app/models/__init__.py
-  - pyproject.toml
-  - tests/conftest.py
-  - tests/test_smoke.py
-  - .env.example
+  - "app/startup.py"
+  - "app/services/container.py"
+  - "app/exceptions.py"
+  - "app/consts.py"
+  - "app/app_config.py"
+  - "app/models/__init__.py"
+  - "pyproject.toml"
+  - "README.md"
+  - "tests/conftest.py"
+  - "tests/test_smoke.py"
+  - ".env.example"
+  - "Dockerfile"
+  - ".dockerignore"
+  - "vulture_whitelist.py"
+  # ...and the same fourteen again under backend/ (see below)
+  - "backend/app/startup.py"
+  - ...
 ```
+
+The frontend's `copier.yml` does the same with `frontend/` twins, and the root's has no twins: it is rendered at the git toplevel.
+
+### How `copier update` treats app-owned files
+
+`copier update` (9.11.3, `_apply_update`) renders the new release into the app, skipping every `_skip_if_exists` file that exists. It then re-applies the app's own changes: the diff from the old release's render to the app, applied with `git apply --exclude <entry>` for every `_skip_if_exists` entry. A template-owned file the app edited is merged that way, and conflicts show as conflict markers. An app-owned file is never touched: copier skipped it when rendering, and the exclusion keeps the app's diff off it.
+
+**In a monorepo, each component's list needs its twins.** The diff is taken and applied at the git toplevel, so its paths carry the component's directory (`backend/Dockerfile`), while the entries are relative to the component (`Dockerfile`). `git apply --exclude` matches the whole path, so the plain entries never match there, and the twins (`backend/Dockerfile`) do. The plain entries are still needed: copier matches them against component-relative paths when it skips existing files during the render. The twins assume the component lives at `backend/` or `frontend/`, as in all six apps.
+
+Without the twins (backend v0.14.0 and frontend v0.21.0 and earlier), the update three-way merged the template's changes into every app-owned file the app had edited: silently, or as conflicts, or as a `.rej` file where the file is gitignored (`frontend/.env.example.rej`). An app-owned file the app had never edited kept its old render, with no hunk and no conflict. The root update was never affected.
+
+**The update reads the new release's list**, not the one of the release the app is on. The first sync to a release that carries the twins already leaves app-owned files alone; dropping the twins from a release brings the merges back at once. Proven on scratch clones in `/work/scratch/mat16` (MAT-16).
+
+**So a template change to an app-owned file reaches an app only by hand.** Its release's changelog entry names the file and the edit, as a migration step, and the violation finder's app-owned section says which app-owned files the release changed and whether the app has the old render, its own edits or the new render (see `downstream_sync_process.md`). Two cases do reach the app: an app-owned file the release adds is created where the app has none, and one the app deleted is re-created (copier re-creates a deleted `_skip_if_exists` file by design; DHCPApp deletes its `public/favicon.png` again after each frontend update).
+
+Upstream, this is a copier bug: in `_apply_update`, the `--exclude` patterns would need the subproject's directory (`subproject_subdir`) prefixed when the subproject is not the git toplevel. The same mismatch, in the other direction, affects the paths of files the app deleted (`files_removed`, taken in toplevel coordinates and used as exclusions for the component-relative render); that one is read in the code, not tested.
 
 ### `_exclude` rules
 
