@@ -61,7 +61,7 @@ For changes that belong in the template:
    uv run pytest ../tests/ -v
    uv run pytest tests/ -v
    ```
-4. Validate flag combinations with `ruff check` (at minimum: minimal, all-on).
+4. Validate flag combinations. `kc project build`, `test` and `lint` render and check every flag on (`test-app`), and the shapes without a database and S3 (backend and root `test-app-no-storage`) and without the shell (frontend `test-app-no-shell`). Render any other combination the change touches and `ruff check` it.
 5. **Update `changelog.md`** with what changed and migration steps (see [Changelog Discipline](#changelog-discipline) below).
 6. **Commit to the template repo(s) and tag.** Don't forget: `backend/` and `frontend/` are separate git repos. Commit and tag each one that was changed:
    ```bash

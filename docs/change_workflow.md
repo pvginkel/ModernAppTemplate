@@ -148,6 +148,8 @@ uv run copier copy . test-app --trust \
 cd test-app && echo "# Test App" > README.md && uv sync
 ```
 
+`bash regen.sh` (run by `kc project build`) does this, and renders a second test-app beside it: `test-app-no-storage`, with `use_database=false` and `use_s3=false` and no domain files, the shape DHCPApp, ZigbeeControl and FieldnotesApp run. `kc project test` runs its own suite (`uv run pytest tests/`), and `kc project lint` checks it as it checks `test-app`.
+
 #### 4.3 Verification Checkpoint
 
 Run verification from the test-app directory:
