@@ -71,7 +71,7 @@ Record the stop in the phase log, and leave the phase `blocked`.
 | 14 | App: ZigbeeControl | done 2026-10-17 | ZigbeeControl `6e76751` (root), `2a5f924` (backend), `08fbf43` (frontend), `a480831` (uv), `43baff0`, `9edbf7a`, `4f6295b`, `12dcfc0`, `6fea457`, `62289c5`, `b937119`, `fda3f8a`, `670761e`, `8659be5` (root `CLAUDE.md`, found in phase 15); Zigbee2mqttDeploy clone `a9fc082` (not pushed); parent `5451d57`, `37521f3`, `465d3eb`, `f8a9e5b`, this entry; none pushed |
 | 15 | App: FieldnotesApp | done 2026-10-17 | FieldnotesApp `3c767a8` (root), `1d923a0` (backend), `c8504a7` (frontend), `72ab23f` (FN-38 docs), `9b99389` (step 5, `CLAUDE.md`), `727420c` (step 9, readyz), `0a94aa0` (6), `9b58615` (8), `1c048d9` (9), `c38e92a` (11), `5d8aefd` (12), `ea59e3e` (13), `fd0be84` (10), `73ea077` (15), `914d02d` (15, `guessed`), `c330148` (upkeep, `CLAUDE.md`), `d7d7368` (upkeep, `conftest.py`); FieldnotesDeploy clone `4b7ac6a` (not pushed); parent `8449fc1`, `0d49fd4`, `3898196`, `8226f71`, `c0cebe9`, `d7b3fec`, this entry; none pushed |
 | 16 | App: PilotApp | done 2026-10-17 | PilotApp `8f57f73` (root), `97923ff` (backend), `1f20820` (frontend), `09ab7ef` (step 5, `CLAUDE.md`), `e3bdbeb` (6), `7893544` (8), `f1c4a02` (9), `67113b3` (11), `168babe` (12), `6d25bc1` (13), `e1329ce` (15), `82a69c6` (10), `9063de7` (10, `test_cli.py`), `c0f88af` (10, imports), `3519a22` (upkeep, `.kubecoder/config.yaml`), `21d279b`, `9e9802e` (no issue id in `CLAUDE.md`) (16, `sse-connect-refusal.spec.ts`); PilotDeploy clone `e323044` (not pushed); parent `59594b9`, `ac9113b`, `5cbf3f1`, `1570c7b`, this entry; none pushed |
-| 17 | The push | todo | |
+| 17 | The push | in progress: pushing since 2026-10-18 | |
 
 ## Phase log
 
