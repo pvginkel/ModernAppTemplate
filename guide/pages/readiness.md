@@ -8,9 +8,9 @@ fails the probe, and how it bounds its own time.
 
 A service that depends on an external system MUST register the readiness check for that system
 itself, with `HealthService.register_check()`. The container passes the service its
-`health_service`. A `Singleton` registers in its constructor, as `SSEConnectionManager` does; a
-`Factory`, built anew for each use, registers once, from its startup hook, as `S3Service.startup()`
-does. A new integration brings its check in the same change.
+`health_service`. A `Singleton` registers in its constructor, as the recipe's `SearchService` does;
+a `Factory`, built anew for each use, registers once, from its startup hook, as
+`S3Service.startup()` does. A new integration brings its check in the same change.
 
 **Why.** Readyz reports what is registered and nothing else, so a dependency without a check is
 down without the probe or the readyz body saying so. Owned by the service, the check comes and goes
@@ -20,7 +20,7 @@ with it, and there is no list elsewhere for a new integration to be missing from
 
 `register_check()` takes `critical` with no default. It MUST be `True` only when the app cannot
 serve its requests without the system, as for the database and S3. Any other check MUST be
-`critical=False`, as the SSE gateway's is.
+`critical=False`, as the recipe's search cluster's is: every page renders without search.
 
 **Why.** Readyz answers `503` when a critical check fails, and Kubernetes takes the pod out of
 service. Every replica shares the system, so its outage takes every pod out at once, and the app
@@ -29,9 +29,9 @@ check is reported, with the body's `status` at `degraded`, and the pod goes on s
 
 ### READY-3 — A check is one quick call, and its I/O times out { #ready-3 }
 
-A check MUST make one cheap call to its system, such as a bucket's `head_bucket` or the gateway's
-own readyz. It returns a `CheckResult`: `CheckStatus.OK`, or `CheckStatus.ERROR` with a `detail`;
-an exception it raises is reported as an error. Its I/O MUST carry a timeout of its own.
+A check MUST make one cheap call to its system, such as a bucket's `head_bucket` or a cluster's
+health endpoint. It returns a `CheckResult`: `CheckStatus.OK`, or `CheckStatus.ERROR` with a
+`detail`; an exception it raises is reported as an error. Its I/O MUST carry a timeout of its own.
 
 **Why.** Readyz waits for each check for its `timeout`, 0.8 seconds by default, under the probe's
 1-second timeout, and runs the checks side by side. A check that outlives its `timeout` is reported

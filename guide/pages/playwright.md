@@ -1,7 +1,7 @@
 # Playwright
 
-The frontend's specs run in a browser against the real backend, the SSE gateway and a database of
-their own. The root suite runner runs them: `run-suite --suite frontend`.
+The frontend's specs run in a browser against the real backend, which serves the SSE stream too,
+and a database of their own. The root suite runner runs them: `run-suite --suite frontend`.
 
 ### PW-1 — A UI feature ships with its specs { #pw-1 }
 
@@ -57,9 +57,9 @@ sets off the event: `await deploymentSse.ensureConnected()`, or a wait for the `
 event, `waitForSseEvent(page, { streamId: 'connection', phase: 'open', event: 'connected' })`.
 
 **Why.** The app renders before its stream is up ([SSE-4](sse.md#sse-4)), so a page that looks
-ready may not receive events yet. An event the backend sends before the gateway accepted the stream
-reaches nobody, and the spec waits for it until it times out. `ensureConnected()` returns once
-`isConnected` is true, which means the gateway accepted the stream.
+ready may not receive events yet. An event the backend sends before it accepted the stream reaches
+nobody, and the spec waits for it until it times out. `ensureConnected()` returns once
+`isConnected` is true, which means the backend accepted the stream and sent its `ready` event.
 
 ## Recipe
 

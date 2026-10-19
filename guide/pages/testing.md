@@ -6,9 +6,9 @@ specs have [their own page](playwright.md).
 
 ### TEST-1 — Tests run against the real infrastructure { #test-1 }
 
-A test MUST run against the real systems the app runs on: PostgreSQL, the S3 storage, the SSE
-gateway, any other service the app's environment provides, and, under Playwright, the backend. A
-test MUST NOT replace one of them with a mock or a fake, unless the operator approved that mock.
+A test MUST run against the real systems the app runs on: PostgreSQL, the S3 storage, any other
+service the app's environment provides, and, under Playwright, the backend. A test MUST NOT replace
+one of them with a mock or a fake, unless the operator approved that mock.
 
 Signing in is where the template stands in for the identity provider: the backend's tests use its
 token fixtures, and the specs its test sessions (`/api/testing/auth/session`).
@@ -16,8 +16,8 @@ token fixtures, and the specs its test sessions (`/api/testing/auth/session`).
 **Why.** A mock behaves as its author expects the system to, so the test passes where the system
 would fail. The bugs that matter sit where the app meets the system: a query the database refuses,
 a migration that leaves the schema short, an object the storage does not hold, an event the
-gateway does not deliver. The dev environment and CI run each of these systems for the tests, and
-every test database is built by the app's migrations.
+backend's stream does not deliver. The dev environment and CI run each of these systems for the
+tests, and every test database is built by the app's migrations.
 
 ### TEST-2 — A missing system stops the run { #test-2 }
 
