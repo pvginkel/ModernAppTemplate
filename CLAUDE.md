@@ -170,7 +170,7 @@ Both templates include dead code detection as part of the `check` pipeline:
 
 - **Parent repo**: Commit docs and scripts here; root-template changes are also committed and tagged in the parent repo (it is the root template's own repo)
 - **Template repos**: Commit template changes in `backend/` or `frontend/`, tag releases there independently
-- **Changelog**: Update `changelog.md` in the parent for cross-template changes; each template repo has its own changelog for template-specific changes
+- **Changelog**: Every template change, backend, frontend or root, gets its entry in the parent's `changelog.md`; the template repos keep no changelog of their own
 
 ## Template Change Workflow
 
