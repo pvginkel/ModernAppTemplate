@@ -189,7 +189,6 @@ uv run --project ../backend copier copy . /work/<App>-new/frontend --trust --def
   -d author_name="<Author>" \
   -d author_email="<email>" \
   -d backend_port=<port> \
-  -d sse_gateway_port=<port> \
   -d frontend_port=<port> \
   -d use_oidc=<true|false> \
   -d use_s3=<true|false> \
@@ -376,7 +375,7 @@ done
 
 Add app-specific dependencies and scripts to the generated `package.json`. The template provides all infrastructure dependencies. Common app additions:
 
-- **Scripts:** `docs:dev`, `docs:build`, `dev:sse-gateway`, deployment scripts
+- **Scripts:** `docs:dev`, `docs:build`, deployment scripts
 - **Dev dependencies:** `vitepress` (if app has docs), domain-specific test utilities
 - **Dependencies:** domain-specific libraries
 

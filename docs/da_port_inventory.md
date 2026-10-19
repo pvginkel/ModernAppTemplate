@@ -138,7 +138,7 @@ DesignAssistant (`pvginkel/DesignAssistant`, archived) was generated from backen
 | BE-C30 | `poetry run coverage` script | all apps | S |
 | BE-C32 | Container: `MetricsService(container=Self())` resolved to `None` | all apps if a service ever uses `self.container` | S |
 | BE-T18 | Service-mocking fixtures and the preflight pattern | `mock_s3` for apps with `use_s3` | S |
-| BE-T20 | Stateless AMQP-publishing `SSEConnectionManager` (RabbitMQ transport) | apps that publish SSE events from a separate process | L |
+| BE-T20 | Stateless AMQP-publishing `SSEConnectionManager` (RabbitMQ transport); retired | apps that publish SSE events from a separate process | L |
 | FE22 | Istanbul coverage for Playwright runs | apps that want E2E coverage numbers | M |
 | FE23 | Per-worker PostgreSQL databases cloned from a seed template | apps with `use_database` if the backend template standardises on PostgreSQL for tests | L |
 | FE24 | Vitest unit/component runner | apps with non-trivial client-side logic | S-M |
@@ -753,7 +753,7 @@ Merged into BE-C14 (same handler and test).
 - **Kind:** feature / refactor
 - **Applies to:** apps that publish SSE events from a separate process (worker, multiple replicas); none of the current downstream apps
 - **Port effort:** L — new RabbitMQ service in dev env, CI and prod, new gateway version, new `rabbitmq_publisher.py` and health check, every `send_event` call site and test changes.
-- **Recommendation:** Optional — only for apps needing worker-originated or multi-replica SSE. Note the stateless design also removes the in-memory tables (a leak/race class); a lighter alternative is to keep HTTP and just remove unused state.
+- **Recommendation:** Retired (operator, 2026-10-19). The SSE stream moved into the backend (`docs/sse_in_process_plan.md`): there is no gateway left to carry an AMQP transport, only the backend process holding a connection delivers to it, and the backend runs as one replica.
 
 ### BE-T21 — DA-specific testing endpoints, worker task publishing, Celery
 

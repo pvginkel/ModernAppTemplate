@@ -71,7 +71,7 @@ If all three pass, the change is safe to port to downstream apps.
 
 The root template generates the monorepo layer that wraps the backend and frontend projects: workspace scaffolding, CI, and the local dev orchestration.
 
-Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `sse_gateway_port` (default `frontend_port` + 2), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
+Questions: `project_name`, `repo_name` (GitHub repo name, e.g. `ElectronicsInventory`; names the `<repo_name>.code-workspace` file and the `<repo_name>Specs` repo), `project_description`, `author_name`, `author_email`, `github_owner` (default `pvginkel`), `frontend_port` (default 3000), `backend_port` (default `frontend_port` + 1), `use_database`, `database_name` (only when `use_database`), `use_s3`, `use_sse`, `backend_image` (default `project_name`), `frontend_image` (default `project_name-ui`), `deploy_repo` (default `<github_owner>/<repo_name>Deploy`), `backend_image_pin_key` (default camelCase of `project_name`), `frontend_image_pin_key` (default backend key + `"UI"`).
 
 Template-owned (updated by `copier update`):
 - `Jenkinsfile` — declarative, on the pipeline guide's modern-app type: the library's `modernApp.test` runs `uv run --no-sync run-suite` in a validation Job on the toolchain image (the `modern-app` sidecar's; no browser, `run-suite` downloads Chromium), with `STAGE=tst`, `BUILD_CACHE=true`, a `postgres` service when `use_database` and a RustFS S3 service when `use_s3`; then `helmCharts.kaniko2` builds of both images and `cicd.writeVersionPins` into the Argo CD deploy repo
@@ -79,7 +79,6 @@ Template-owned (updated by `copier update`):
 - `tools/suite_runner/` — the `run-suite` test orchestrator, same command locally and in CI
 - `Procfile.dev`
 - `scripts/dev.py` — honcho dev stack, runs itself inside the modern-app container
-- `scripts/dev-sse-gateway.sh` — only with `use_sse`; runs the `ssegateway` npm package from `frontend/node_modules`
 - `scripts/check_updates.py` — the dependency-update report (stdlib only): finds every directory with a `uv.lock` (`uv tree --outdated --depth 1 --frozen`) or a `package.json` (`pnpm outdated`), and classifies each newer release as major, minor or patch; `--json` for a machine-readable report
 - `.gitignore`
 - `.vscode/settings.json`
@@ -123,7 +122,7 @@ Four boolean flags control file inclusion and conditional code sections. These f
 | `use_database` | SQLAlchemy, Alembic, migrations, pool diagnostics | — |
 | `use_oidc` | OIDC authentication (BFF pattern with JWT cookies) | OIDC login/logout UI, token handling |
 | `use_s3` | S3 storage, CAS endpoints, image processing | File upload components |
-| `use_sse` | Server-Sent Events via SSE Gateway | SSE client, real-time update components |
+| `use_sse` | Server-Sent Events: the browser's stream, served by the backend | SSE client, real-time update components |
 
 Files behind flags are excluded entirely via copier.yml `_exclude`. Files with conditional sections use `.jinja` suffix. **Minimize Jinja usage** — prefer plain Python files with runtime conditionals or separate files per feature over Jinja conditionals.
 
@@ -157,11 +156,11 @@ All infrastructure code. Developers should not edit these:
 - `app/api/metrics.py` — Prometheus metrics endpoint
 - `app/api/oidc_hooks.py` — OIDC before/after request hooks (excluded when `use_oidc=false`)
 - `app/api/auth.py` — OIDC auth endpoints
-- `app/api/sse.py` — SSE Gateway callbacks
+- `app/api/sse.py` — the browser's SSE stream, `GET /api/sse/stream`
 - `app/api/cas.py` — CAS blob serving
 - `app/services/` — all infrastructure services
 - `app/utils/` — all utilities
-- `app/schemas/` — infrastructure schemas (health, task, SSE gateway)
+- `app/schemas/` — infrastructure schemas (health, task)
 - `run.py` — server entry point
 - `scripts/` — `testing-server.sh`, `dev-watch.sh`, `check.py`, `init-dev-database.py`, `wait-for-services.py`
 - `alembic/env.py`, `alembic/script.py.mako` — migration config
@@ -280,7 +279,7 @@ _exclude:
   - "{% if not use_s3 %}app/utils/mime_handling.py{% endif %}"
   - "{% if not use_s3 %}app/schemas/upload_document.py{% endif %}"
 
-  # SSE (sse_connection_manager.py and sse_gateway_schema.py always included — TaskService depends on them)
+  # SSE (sse_connection_manager.py always included — TaskService depends on it)
   - "{% if not use_sse %}app/api/sse.py{% endif %}"
   - "{% if not use_sse %}app/services/frontend_version_service.py{% endif %}"
   - "{% if not use_sse %}app/utils/sse_utils.py{% endif %}"
@@ -335,13 +334,13 @@ Generated once with correct deps for the chosen feature flags. App manages it af
 - `ImageService` -> `CasImageService` (file: `cas_image_service.py`)
 - `VersionService` -> `FrontendVersionService` (file: `frontend_version_service.py`)
 
-### 9. SSEConnectionManager and SSE gateway schema are always included
+### 9. SSEConnectionManager is always included
 
-`TaskService` depends on `SSEConnectionManager` which imports `sse_gateway_schema`. Both files are included regardless of `use_sse`. Only the SSE blueprint, FrontendVersionService, sse_utils, and log_capture are SSE-conditional.
+`TaskService` depends on `SSEConnectionManager`, so the manager is included regardless of `use_sse`; without `use_sse` nothing ever connects, and `send_event` answers `False`. Only the SSE blueprint (the stream route), FrontendVersionService, sse_utils, and log_capture are SSE-conditional. The gateway's callback schema, `sse_gateway_schema.py`, was always included with the manager until the stream moved into the backend; it is gone.
 
 ### 10. `requests` package is an explicit dependency
 
-`SSEConnectionManager` imports `requests`. Even though it's available as a transitive dependency, it must be explicit in pyproject.toml.
+`FrontendVersionService` imports `requests` (the manager did until the stream moved into the backend). Even though it's available as a transitive dependency, it must be explicit in pyproject.toml.
 
 ### 11. Replace `flask_log_request_id`
 
@@ -524,7 +523,6 @@ uv run pytest tests/ -v          # Domain tests
 - `app/schemas/__init__.py` — empty
 - `app/schemas/health_schema.py` — health response
 - `app/schemas/task_schema.py` — task status/events
-- `app/schemas/sse_gateway_schema.py` — SSE Gateway types (always included)
 
 **Build/deploy:**
 - `pyproject.toml.jinja` — dependencies (`_skip_if_exists`)

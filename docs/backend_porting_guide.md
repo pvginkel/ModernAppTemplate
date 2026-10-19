@@ -23,7 +23,7 @@ The key insight: the template owns infrastructure, the app owns domain logic. Po
 | `use_database` | SQLAlchemy, Alembic, migrations, pool diagnostics, diagnostics service |
 | `use_oidc` | OIDC auth (BFF pattern with JWT cookies), auth endpoints, testing auth |
 | `use_s3` | S3 storage, CAS endpoints, image processing, testing content |
-| `use_sse` | Server-Sent Events, SSE Gateway integration, frontend version notifications |
+| `use_sse` | Server-Sent Events (the browser's stream, served by the backend), frontend version notifications |
 
 You can start with a subset of flags and enable more later (see Phase 3).
 
@@ -88,7 +88,7 @@ The scaffold should pass basic tests out of the box.
 
 The template enforces a clean separation between infrastructure and domain settings:
 
-- **`app/config.py` → `Settings`** (template-owned): flask_env, database_url, OIDC config, CORS, S3 credentials, SSE gateway URL, graceful shutdown timeout, task worker config
+- **`app/config.py` → `Settings`** (template-owned): flask_env, database_url, OIDC config, CORS, S3 credentials, SSE heartbeat interval and queue cap, graceful shutdown timeout, task worker config
 - **`app/app_config.py` → `AppSettings`** (app-owned): everything specific to your domain
 
 **Example** — IoTSupport's `AppSettings` contains MQTT config, Keycloak admin credentials, Elasticsearch config, device provisioning URLs, rotation schedule, firmware paths. None of that belongs in the template's `Settings`.
