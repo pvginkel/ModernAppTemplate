@@ -1,8 +1,12 @@
 # Plan — the SSE transport in-process (the gateway folded into the backend)
 
-Source: `PilotAppSpecs/handovers/sse-transport-in-process_2026-10-19.md`. Its §1 (what must not
-change) is the contract; this plan maps the rest onto the three template repos, the guide and the
-six apps, and names the choices the handover leaves open.
+Source: `PilotAppSpecs/handovers/sse-transport-in-process_2026-10-19.md`. This plan maps it onto
+the three template repos, the guide and the six apps, and names the choices the handover leaves
+open. The handover's §1 lists what must not change; the operator ruled (2026-10-19) that the
+browser's wire protocol is ours to change too, since we own the whole stack. The default stays
+unchanged (it costs nothing), but where a change makes the in-process design simpler, make it and
+change the SharedWorker, the provider and the specs in the same release. The recommendations
+below were approved the same day.
 
 ## Verdict
 
