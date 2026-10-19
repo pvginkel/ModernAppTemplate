@@ -36,7 +36,13 @@ capabilities:
 # specs that run against a backend. Splitting them into `python` + `frontend`
 # would put the two halves of one command in two containers.
 tools:
+  # 8Gi, not the catalog's 5Gi: the full-flag Playwright dev pass of root/test-app
+  # peaked at about 5.4 GB (2026-10-19), and an app sync's Playwright run beside it
+  # would not fit.
   - use: modern-app
+    resources:
+      limits:
+        memory: 8Gi
   # kubectl (with Helm and Terraform) for reading the prd cluster: the Argo CD
   # syncs that follow a push of the apps and their deploy repos.
   - use: iac
