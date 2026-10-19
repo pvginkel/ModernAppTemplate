@@ -1,5 +1,7 @@
 # Plan — the SSE transport in-process (the gateway folded into the backend)
 
+**Status: done (2026-10-19).** Released as root v0.3.0, backend v0.16.0 and frontend v0.23.0 (see `changelog.md`). All six apps are synced and deployed, and their deploy charts no longer run the gateway. IoTSupport card IS-6 tracks a pre-existing gap the rollout exposed: its device-log subscription does not survive a stream reconnect.
+
 Source: `PilotAppSpecs/handovers/sse-transport-in-process_2026-10-19.md`. This plan maps it onto
 the three template repos, the guide and the six apps, and names the choices the handover leaves
 open. The handover's §1 lists what must not change; the operator ruled (2026-10-19) that the
