@@ -8,6 +8,100 @@ See `CLAUDE.md` for instructions on how to use this changelog when updating apps
 
 <!-- Add new entries at the top, below this line -->
 
+## 2026-10-19 — Root v0.3.0, Backend v0.16.0, Frontend v0.23.0
+
+Removes the SSE gateway sidecar; adds subscriptions. The backend serves the browser's SSE stream itself, `GET /api/sse/stream`, and delivers events to it in-process: the Node sidecar (the `ssegateway` npm package), its connect callback, its shared secret and the loopback HTTP go. Source: `PilotAppSpecs/handovers/sse-transport-in-process_2026-10-19.md`, mapped onto the templates in `docs/sse_in_process_plan.md`. The three releases ship together, and an app takes them in one sync. All six apps are on root v0.2.1, backend v0.15.0 and frontend v0.22.0, so a sync reads this entry alone. The first section is the sync's checklist, in the order a sync runs; the sections after it say what changed.
+
+### Syncing an app to this release
+
+**What changed:** everything in the sections below. The browser's wire protocol is the gateway's (`ready`, unnamed `{"type", "payload"}` messages, `: heartbeat` comments, `rejected`), so the SharedWorker, the provider and every hook on `useSseContext()` work as before. The by-hand work is in app-owned files, which `copier update` leaves alone, and in each app's deploy chart.
+
+**Migration steps:**
+
+1. **Run the violation finder, all three components, before the updates**, as in the previous entry's step 1, with `--new-ref v0.3.0`, `v0.16.0` and `v0.23.0`. The app-owned files this release changes, in every app: root `.kubecoder/config.yaml` and `.kubecoder/project.yaml` (step 9); backend `app/services/container.py` (step 5), `.env.example` and `tests/test_smoke.py` (step 9); frontend `package.json` and `src/lib/consts.ts` (step 8). A file on either list that this checklist doesn't name is a changelog gap: take the template's change from `--diff`, and report it.
+2. **Root `copier update`** (v0.3.0). Commit. It deletes `scripts/dev-sse-gateway.sh` and the `gateway:` line of `Procfile.dev`, and rewords `scripts/dev.py`. Every `copier update` still needs a clean tree and runs from the component's directory:
+   ```bash
+   cexec modern-app uv run --project /work/ModernAppTemplate/backend --locked copier update --trust --defaults
+   ```
+3. **Backend `copier update`** (v0.16.0). Commit. It deletes `app/schemas/sse_gateway_schema.py` and rewrites `app/api/sse.py`, `app/services/sse_connection_manager.py`, `app/config.py` and `run.py`, among others. The backend suite fails until steps 5 and 6 are done.
+4. **Frontend `copier update`** (v0.23.0). Commit. IoT: `vite.config.ts` keeps its esptool alias and `optimizeDeps`; on a conflict, take the template's `/api/sse` proxy entries, which target the backend now.
+5. **Backend `app/services/container.py`** (every app). The manager takes the lifecycle coordinator and the queue cap, and nothing of the gateway's:
+   ```python
+   sse_connection_manager = providers.Singleton(
+       SSEConnectionManager,
+       lifecycle_coordinator=lifecycle_coordinator,
+       queue_max_frames=config.provided.sse_queue_max_frames,
+   )
+   ```
+   Delete `gateway_url`, `http_timeout` (EI's with its comment on the gateway's callback timeout) and `health_service`. `lifecycle_coordinator` is defined above it in all six. ZigbeeControl: the comment above `tab_status_service` stops saying "SSE Gateway".
+6. **Backend app-owned tests of the old manager or the callback.** `on_connect(request_id, token, url)` and `on_disconnect(token)` are now `on_connect(request_id, subject, *, local_admin=False) -> SSEConnection`, which binds the identity itself, and `on_disconnect(connection)`; the constructor is `SSEConnectionManager(lifecycle_coordinator, queue_max_frames=1000)`. A test that simulates a browser calls `on_connect` directly, with no stream.
+   - IoT: `tests/services/test_sse_connection_manager.py` (13 constructions with `gateway_url`, 28 `on_connect`/`on_disconnect` calls) mostly re-tests the template's manager, which its own suite covers now: delete it, keeping only a case about IoT's own code. `tests/api/test_device_log_stream.py` (7 `on_connect`) and `tests/services/test_mqtt_service.py` (4 `on_connect`, 1 `on_disconnect`): the new signatures.
+   - FieldnotesApp: `tests/fieldnotes/test_inbox.py` (3 `on_connect`): the new signature.
+   - PilotApp: `tests/test_sse_callback.py` posts to the callback, which is gone. Rewrite its role cases against `GET /api/sse/stream`, each read as a `200` stream whose first event is `ready`, or `rejected` with `{"status": 401|403, ...}`: Flask's test client with `buffered=False`, frames read one at a time. The backend template's `tests/api/test_sse_stream.py` is the model.
+   - EI: delete `tests/integration/sse_gateway_helper.py` and the `sse_gateway_server` fixture in `tests/conftest.py`. Nothing uses them, and the fixture sets the manager's `gateway_url`, which is gone.
+   - DHCPApp, ZigbeeControl: nothing.
+7. **FieldnotesApp and PilotApp: the access-log redaction goes.** It masked the callback's `secret` query parameter, and nothing is left to mask: delete `app/access_log.py`, `tests/test_access_log.py`, and the `redact_access_log()` call and its import in `app/startup.py`. FieldnotesApp: the comment in `tests/fieldnotes/test_api.py` (about l.42) stops naming the gateway.
+8. **Frontend app-owned files** (every app).
+   - `package.json`: delete the `ssegateway` devDependency, run `cexec modern-app sh -c 'cd frontend && pnpm install'`, and commit the lockfile (`amqplib` leaves with it).
+   - `src/lib/consts.ts`: delete `DEFAULT_SSE_GATEWAY_PORT`. Nothing imports it.
+   - ZigbeeControl: `.env.example` loses `SSE_GATEWAY_URL` and its comment.
+   - IoT: `tests/e2e/devices/devices-logs-sse.spec.ts` loses its "gateway callback race" note and the `test.skip` guards for "gateway may not be available": the stream is the backend's, which every spec runs against (TEST-2). `tests/e2e/rotation/rotation-sse.spec.ts` and `tests/support/fixtures.ts` stop naming the gateway in their headers.
+9. **The rest of the gateway's wording, in app-owned files.**
+   - `backend/.env.example`: delete `SSE_GATEWAY_URL` and `SSE_CALLBACK_SECRET` with their comments (DHCPApp, FieldnotesApp, PilotApp, ZigbeeControl), and add the template's `SSE_QUEUE_MAX_FRAMES=1000` under its comment, "Events an SSE connection queues before it counts as stalled and is closed" (every app; 1000 is the default).
+   - `backend/tests/test_smoke.py` (every app): the readyz comment, as the template's: "Not readyz: readiness includes checks of services a unit test may have no process for."
+   - `.kubecoder/config.yaml` (every app): delete the `sse-gateway` port entry, and make the header comment "Flask backend per worker (frontend/tests/support/process/servers.ts), so a single command needs both toolsets in the same container." `.kubecoder/project.yaml` (all but IoT): "the backend per worker"; ZigbeeControl's tab-status description (about l.38) too.
+   - `CLAUDE.md`: the root one of DHCPApp, EI, FieldnotesApp, IoT (its `SSE gateway :3102`) and ZigbeeControl (two places); `backend/CLAUDE.md` of DHCPApp and EI (`SSE_GATEWAY_*`); `frontend/CLAUDE.md` of DHCPApp (four places, `SSE_GATEWAY_URL` among them).
+   - ZigbeeControl: the two docstrings of `app/services/tab_status_service.py` ("through SSE Gateway").
+   - `docs/architecture/architecture.yaml` (FieldnotesApp, PilotApp): delete the two relations to `svc:ssegateway` (`rel:<app>-ui-consumes-ssegateway`, `rel:<app>-consumes-ssegateway` with its `boundBy: "env:SSE_GATEWAY_URL"`) and the comment above them: the stream is part of the backend's `/api`. PilotApp: the API's summary stops naming "the SSE gateway's connection callbacks".
+10. **Refresh the frontend's OpenAPI cache** (every app), after the backend update: `python3 scripts/regenerate-openapi.py --frontend` at the root, and commit `frontend/openapi-cache/openapi.json`. `/api/sse/callback` leaves the document and `/api/sse/stream` joins it; until the refresh, the backend's `tests/test_openapi_cache.py` fails.
+11. **The deploy chart** (`<App>Deploy`; the operator, once the new images are deployed): delete the gateway sidecar container, its generated callback secret, the backend's `SSE_CALLBACK_SECRET` env and the gateway image pin. The old sidecar is harmless while it stays: the new UI image's nginx no longer routes to it, and the backend ignores `SSE_CALLBACK_SECRET`. Where the chart sets `WAITRESS_THREADS`, check it leaves room: every open stream, one per browser, holds a Waitress thread out of it.
+12. **Gates:** the app's `kc project setup`, `build`, `test` and `lint`, its Playwright suite through `uv run run-suite --suite frontend` (the preview pass proves the SharedWorker path), and the backend suite once more with `backend/.env` moved aside (as before). After the deploy, by hand: the browser's `/api/sse/stream` gets `ready` at once through the UI's nginx, and events arrive.
+
+### The backend serves the SSE stream
+
+**What changed:** backend (`26139ee`, `7f50359`, `88517ef`).
+- `GET /api/sse/stream?request_id=…` on the API blueprint, `@public` and `@no_role_check`, replaces the gateway's `POST /api/sse/callback`. The OIDC gate resolves the caller from the access-token cookie in its tolerant mode, refreshing an expired access token from the refresh cookie, and the route does the role check a `GET` gets; the local admin (OIDC off) is accepted. Accepted, the stream registers its connection, writes `ready`, then the connection's queue, with a `: heartbeat` comment after `SSE_HEARTBEAT_INTERVAL` idle (30 s in production).
+- **Every refusal is in-stream:** a missing request id or one with a colon (400), no token, an invalid one or a failed refresh (401), a caller without the app's roles (403), and the testing hook's forced refusal each answer `200` with one `rejected` event, `{"status": <code>, "message": "<reason phrase, upper case>"}`, and end, because `EventSource` does not reconnect a non-200. A refused stream is never registered and never counts in the metrics.
+- One Waitress request thread per open stream, so per browser (the SharedWorker); `WAITRESS_THREADS` (50) bounds the streams and the API's requests together. A stream holds no database connection. `run.py` sets Waitress's `channel_request_lookahead=1`, so a browser that has gone is noticed at the next heartbeat; without it Waitress stops reading a channel while its request runs, and saw the close at the third (90 s in production). `PREPARE_SHUTDOWN` ends every stream, and the browser reconnects with backoff.
+- `SSEConnectionManager(lifecycle_coordinator, queue_max_frames=1000)`: an `SSEConnection` per request id, with its identity, its channels and a bounded queue of formatted frames (`SSE_QUEUE_MAX_FRAMES`). `send_event(target, event_data, event_name, service_type) -> bool` is unchanged and never blocks; a full queue (a stalled browser) closes that connection, and the browser reconnects. `on_connect(request_id, subject, *, local_admin=False) -> SSEConnection` registers the connection and binds its identity under one lock before the connect observers fire, so an observer that sends to `Target.subject` now reaches the new connection; `on_disconnect(connection)` removes it only while it is the current one. The observers still receive the request id alone; `bind_identity`, `has_connection` and `get_connection_info` stay.
+- **Subscriptions, new:** `subscribe(request_id, channel) -> bool`, `unsubscribe(request_id, channel)` and `Target.channel(name)`. Channel names are the app's. A subscription goes with its connection, and a connection replaced under the same request id starts with none. A route that subscribes a connection checks first that it is the caller's own, with `get_connection_info(request_id)`'s `subject` and `local_admin`: the guide's new SSE-6.
+- **Metrics:** `sse_gateway_connections_total`, `sse_gateway_events_sent_total` and `sse_gateway_active_connections` are now `sse_connections_total{action}`, `sse_events_sent_total{service,status}` (with a `dropped` status for a full queue) and `sse_active_connections`. `sse_identity_binding_total` stays. `sse_gateway_send_duration_seconds`, which timed the loopback POST, goes. **Readiness:** the non-critical `sse_gateway` check goes, so readyz has no `sse_gateway` key.
+- Gone: `app/schemas/sse_gateway_schema.py`, the root `sse_bp` registration, the `requests` client in the manager, the settings `SSE_GATEWAY_URL` and `SSE_CALLBACK_SECRET` (an environment that still sets them is ignored), and the `sse_gateway_port` question. New setting: `SSE_QUEUE_MAX_FRAMES`. `TestingService`'s hook is `*_forced_sse_connect_error`; its route keeps its path, `/api/testing/sse/force-callback-error`.
+- The template's own suite: `tests/api/test_sse_stream.py` replaces the callback tests, the manager's tests are rewritten, the integration tests connect to the backend's own stream with no gateway subprocess, and `tests/integration/test_sse_waitress.py` runs the stream under Waitress as `run.py` does (frames written through, a closed client unregistered within a heartbeat, an idle stream outliving `channel_timeout`, shutdown ending the body).
+
+**Migration steps:** sync steps 3, 5, 6, 7, 9 and 10.
+
+### The RabbitMQ transport is dropped
+
+**What changed:** nothing in a template file; the operator's decision (2026-10-19). The gateway's AMQP transport, the only way an event could reach a browser from a process other than the one holding its stream, leaves with the `ssegateway` package; no template or app used it. Only the backend process that holds a stream delivers to it, so the backend runs as one replica and sends every event itself. `docs/da_port_inventory.md` retires BE-T20.
+
+**Migration steps:** none.
+
+### The frontend and the dev stack lose the gateway
+
+**What changed:** frontend (`96658b6`) and root (`ae7f902`).
+- Frontend: no `ssegateway` devDependency (app-owned `package.json`). `nginx.conf` has no `/api/sse/` location: `/api/` serves the stream, and `proxy.conf` already turns buffering off. `vite.config.ts` has no `gatewayProxyTarget` or `SSE_GATEWAY_URL`; its dev and preview `/api/sse` entries target the backend and keep `configureSseProxy`. No `DEFAULT_SSE_GATEWAY_PORT` (app-owned `consts.ts`). The Playwright harness boots the backend, then the frontend, with no `gatewayUrl`, `gatewayLogs` or `PLAYWRIGHT_GATEWAY_LOG_STREAM`. The SSE worker, the provider and the infrastructure specs change in comments only, bar `sse-connectivity.spec.ts`, which checks the stream URL is not the backend's. The `sse_gateway_port` question is retired.
+- Root: no `gateway:` line in `Procfile.dev`, no `scripts/dev-sse-gateway.sh` (and with it no `_exclude`), no `sse-gateway` port in `.kubecoder/config.yaml` (app-owned); `scripts/dev.py` and `.kubecoder/project.yaml` stop naming the gateway. The `sse_gateway_port` question is retired, and `use_sse`'s help names the backend's stream.
+
+**Migration steps:** sync steps 2, 4, 8, 9 and 11.
+
+### Guide and docs
+
+**What changed:** this repo only (`21ab2a7`, `3f6ac30`); nothing reaches an app. The modern app guide's SSE page describes the backend's stream, the in-stream `rejected` and subscriptions, with a new rule, SSE-6 (a route subscribes only the caller's own connection), and SSE-2 naming `Target.channel()`. SSE-4's and SSE-5's reasons, PW-5, TEST-1 and the readiness examples lose the gateway; the rules stand. `docs/copier_approach.md`, the flag tables and the porting guides follow, and the `modern-app` skill carries SSE-6 (KubeCoderConfig 0.14.3).
+
+**Migration steps:** none.
+
+### Behaviour users and tests will notice
+
+**What changed:**
+- A backend restart (`dev-watch.sh`, a deploy) ends every stream; the provider reconnects with backoff, and `ready` comes again. Before, the gateway kept the browser's stream while the restarted backend had lost its registry, so the browser got nothing until it reconnected.
+- Events a connect observer queues, such as the frontend version, arrive after `ready`; the gateway sent them first. The worker and the provider take either order.
+- An expired access token with a valid refresh cookie no longer costs a refused stream, a session probe and a reopen: the stream refreshes it and is accepted, with the new cookies on its response.
+- A browser whose queue fills (1,000 frames unread) is disconnected and reconnects (`sse_events_sent_total{status="dropped"}`).
+- A stream whose browser has gone is unregistered within one heartbeat, and its disconnect observers run then. IoT's `DeviceLogStreamService` ends that connection's log subscription as before; porting its own subscription map onto `subscribe` and `Target.channel` is a follow-up, not part of this release.
+
+**Migration steps:** sync step 12. A test that changes outcome at the sync starts here.
+
 ## 2026-10-18 — Root v0.2.1, Backend v0.15.0, Frontend v0.22.0
 
 Follow-ups to the DesignAssistant port, from the six app syncs to the previous release: cards MAT-16 and MAT-18 to MAT-27. The three releases ship together, and an app takes them in one sync. All six apps are on root v0.2.0, backend v0.14.0 and frontend v0.21.0, so a sync reads this entry alone. The first section is the sync's checklist, in the order a sync runs; the sections after it say what changed, and each points back at its steps. (EI = ElectronicsInventory, IoT = IoTSupport. The database apps are EI, IoT and PilotApp.)
