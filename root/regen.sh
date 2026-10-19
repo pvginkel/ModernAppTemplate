@@ -44,7 +44,6 @@ regen() {
     -d author_email="test@example.com" \
     -d frontend_port=3000 \
     -d backend_port=5000 \
-    -d sse_gateway_port=3001 \
     -d use_database="$database" \
     -d use_s3="$s3" \
     -d use_sse=true)

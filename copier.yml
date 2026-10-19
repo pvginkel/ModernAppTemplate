@@ -49,11 +49,6 @@ backend_port:
   default: "{{ frontend_port + 1 }}"
   help: "Backend dev server port"
 
-sse_gateway_port:
-  type: int
-  default: "{{ frontend_port + 2 }}"
-  help: "SSE Gateway dev port"
-
 use_database:
   type: bool
   default: true
@@ -73,7 +68,7 @@ use_s3:
 use_sse:
   type: bool
   default: false
-  help: "The app uses the SSE Gateway (gateway in the dev stack)"
+  help: "The app uses server-sent events (the backend's /api/sse/stream)"
 
 backend_image:
   type: str
@@ -112,8 +107,3 @@ _skip_if_exists:
   - "scripts/regenerate-openapi.py"
   - ".kubecoder/config.yaml"
   - ".kubecoder/project.yaml"
-
-# ── Feature-flagged file exclusion ────────────────────────────────────
-
-_exclude:
-  - "{% if not use_sse %}scripts/dev-sse-gateway.sh{% endif %}"

@@ -7,8 +7,8 @@
 # So after a template edit, run `kc project build` before `test` or `lint`.
 #
 # Component order is load-bearing: root/regen.sh copies the backend and
-# frontend test-apps into the root test-apps, and the backend mother suite
-# takes the SSE gateway from frontend/test-app/node_modules. So root comes last.
+# frontend test-apps into the root test-apps, which wrap both. So root comes
+# last.
 #
 # backend/test-app and frontend/test-app are tracked in their template repos,
 # and a regen churns their lockfiles and .copier-answers.yml. That churn is the

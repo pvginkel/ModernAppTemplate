@@ -1,9 +1,8 @@
 # KubeCoder environment manifest for the {{ repo_name }} monorepo.
 #
 # One sidecar rather than `python` + `frontend`: the Playwright harness boots the
-# Flask backend{% if use_sse %} and the SSE gateway{% endif %} per worker
-# (frontend/tests/support/process/servers.ts), so a single command needs both
-# toolsets in the same container.
+# Flask backend per worker (frontend/tests/support/process/servers.ts), so a
+# single command needs both toolsets in the same container.
 {% if use_database or use_s3 %}
 #
 {% endif %}
@@ -60,8 +59,3 @@ ports:
   - name: backend
     port: {{ backend_port }}
     type: http
-{% if use_sse %}
-  - name: sse-gateway
-    port: {{ sse_gateway_port }}
-    type: http
-{% endif %}
